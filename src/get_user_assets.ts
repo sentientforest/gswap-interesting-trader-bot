@@ -13,7 +13,7 @@ export async function getUserAssets(
   limit: number = 10,
 ): Promise<GetUserAssetsResult> {
   const gSwap = new GSwap({
-    dexBackendBaseUrl: 'https://dex-backend-dev1.defi.gala.com',
+    dexBackendBaseUrl: 'https://dex-backend-prod1.defi.gala.com',
   });
 
   const assets = await gSwap.assets.getUserAssets(ownerAddress, page, limit);

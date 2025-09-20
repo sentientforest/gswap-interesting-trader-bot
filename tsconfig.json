@@ -44,5 +44,5 @@
   "ts-node": {
     "esm": true
   },
-  "exclude": ["./dist"]
+  "exclude": ["./dist", "./ext", "./node_modules", "./scripts"]
 }
