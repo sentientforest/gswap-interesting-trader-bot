@@ -5,114 +5,160 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>The Most Interesting Trader in the World</title>
     <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
+    <meta name="description" content="An automated trading bot for GalaChain - I don't always trade crypto, but when I do, I prefer the best.">
 </head>
 <body>
     <div class="container">
-        <header class="hero-section">
+        <header class="hero-section fade-in">
             <div class="hero-content">
                 <div class="avatar">
-                    <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIgdmlld0JveD0iMCAwIDEwMCAxMDAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxjaXJjbGUgY3g9IjUwIiBjeT0iNTAiIHI9IjUwIiBmaWxsPSIjMkE0NzZBIi8+Cjx0ZXh0IHg9IjUwIiB5PSI1OCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjQwIiBmaWxsPSJnb2xkIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7ihqI8L3RleHQ+Cjwvc3ZnPgo=" alt="The Most Interesting Trader">
+                    <img src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTIwIiBoZWlnaHQ9IjEyMCIgdmlld0JveD0iMCAwIDEyMCAxMjAiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxkZWZzPgo8bGluZWFyR3JhZGllbnQgaWQ9ImdyYWQiIHgxPSIwJSIgeTE9IjAlIiB4Mj0iMTAwJSIgeTI9IjEwMCUiPgo8c3RvcCBvZmZzZXQ9IjAlIiBzdHlsZT0ic3RvcC1jb2xvcjojZjU5ZTBiO3N0b3Atb3BhY2l0eToxIiAvPgo8c3RvcCBvZmZzZXQ9IjEwMCUiIHN0eWxlPSJzdG9wLWNvbG9yOiNkOTc3MDY7c3RvcC1vcGFjaXR5OjEiIC8+CjwvbGluZWFyR3JhZGllbnQ+CjwvZGVmcz4KPGNpcmNsZSBjeD0iNjAiIGN5PSI2MCIgcj0iNjAiIGZpbGw9InVybCgjZ3JhZCkiLz4KPHN2ZyB4PSIzMCIgeT0iMzAiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCI+Cjx0ZXh0IHg9IjMwIiB5PSI0NCIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjQ4IiBmaWxsPSJ3aGl0ZSIgdGV4dC1hbmNob3I9Im1pZGRsZSI+4oayPC90ZXh0Pgo8L3N2Zz4KPC9zdmc+" alt="The Most Interesting Trader">
                 </div>
                 <h1 class="hero-title">The Most Interesting Trader in the World</h1>
                 <p class="hero-tagline" id="tagline">I don't always trade crypto, but when I do, I prefer...</p>
                 <div class="status-indicator" id="status-indicator">
                     <span class="status-dot" id="status-dot"></span>
-                    <span class="status-text" id="status-text">Loading...</span>
+                    <span class="status-text" id="status-text">Initializing...</span>
                 </div>
             </div>
         </header>
 
         <main class="dashboard">
-            <div class="controls-section">
+            <section class="controls-section slide-in">
                 <div class="card">
-                    <h2>Bot Controls</h2>
+                    <h2>🎮 Bot Controls</h2>
                     <div class="controls">
-                        <button id="start-btn" class="btn btn-primary" onclick="startBot()">Start Trading</button>
-                        <button id="stop-btn" class="btn btn-secondary" onclick="stopBot()">Stop Trading</button>
-                        <button id="refresh-btn" class="btn btn-tertiary" onclick="refreshStatus()">Refresh Status</button>
+                        <button id="start-btn" class="btn btn-primary" onclick="startBot()">
+                            <span>Start Trading</span>
+                        </button>
+                        <button id="stop-btn" class="btn btn-secondary" onclick="stopBot()">
+                            <span>Stop Trading</span>
+                        </button>
+                        <button id="refresh-btn" class="btn btn-tertiary" onclick="refreshStatus()">
+                            <span>Refresh Status</span>
+                        </button>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="stats-grid">
+            <section class="stats-grid slide-in">
                 <div class="card stat-card">
-                    <h3>Portfolio Balance</h3>
+                    <h3>💰 Portfolio Balance</h3>
                     <div class="balance-info" id="balance-info">
                         <p class="preferred-balance">
-                            <span class="label">Preferred Token:</span>
+                            <span class="label">🎯 Preferred Token:</span>
                             <span class="value" id="preferred-balance">--</span>
                         </p>
                         <p class="gala-balance">
-                            <span class="label">GALA:</span>
+                            <span class="label">⛽ GALA:</span>
                             <span class="value" id="gala-balance">--</span>
                         </p>
                         <p class="other-tokens">
-                            <span class="label">Other Tokens:</span>
+                            <span class="label">📊 Other Tokens:</span>
                             <span class="value" id="other-tokens-count">--</span>
                         </p>
                     </div>
                 </div>
 
                 <div class="card stat-card">
-                    <h3>Trading Statistics</h3>
+                    <h3>📈 Trading Statistics</h3>
                     <div class="stats-info" id="stats-info">
                         <p class="uptime">
-                            <span class="label">Uptime:</span>
+                            <span class="label">⏱️ Uptime:</span>
                             <span class="value" id="uptime">--</span>
                         </p>
                         <p class="success-rate">
-                            <span class="label">Success Rate:</span>
+                            <span class="label">✅ Success Rate:</span>
                             <span class="value" id="success-rate">--</span>
                         </p>
                         <p class="total-trades">
-                            <span class="label">Total Trades:</span>
+                            <span class="label">🔄 Total Trades:</span>
                             <span class="value" id="total-trades">--</span>
                         </p>
                     </div>
                 </div>
 
                 <div class="card stat-card">
-                    <h3>Configuration</h3>
+                    <h3>⚙️ Configuration</h3>
                     <div class="config-info" id="config-info">
                         <p class="wallet">
-                            <span class="label">Wallet:</span>
+                            <span class="label">👛 Wallet:</span>
                             <span class="value small" id="wallet-address">--</span>
                         </p>
                         <p class="interval">
-                            <span class="label">Trade Interval:</span>
+                            <span class="label">⏰ Trade Interval:</span>
                             <span class="value" id="trade-interval">--</span>
                         </p>
                         <p class="trading-status">
-                            <span class="label">Trading:</span>
+                            <span class="label">🚀 Trading:</span>
                             <span class="value" id="trading-enabled">--</span>
+                        </p>
+                        <p class="timeout">
+                            <span class="label">⏳ Timeout:</span>
+                            <span class="value" id="transaction-timeout">--</span>
                         </p>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="recent-activity">
+            <section class="recent-activity slide-in">
                 <div class="card">
-                    <h3>Recent Trading Activity</h3>
+                    <h3>🎯 Recent Trading Activity</h3>
                     <div class="activity-list" id="activity-list">
-                        <p class="no-activity">No recent activity</p>
+                        <div class="no-activity">
+                            <span>No recent trading activity</span>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="other-tokens-section">
+            <section class="other-tokens-section slide-in">
                 <div class="card">
-                    <h3>Token Holdings</h3>
+                    <h3>🪙 Token Holdings</h3>
                     <div class="token-list" id="token-list">
-                        <p class="no-tokens">No token data available</p>
+                        <div class="no-tokens">
+                            <span>Loading token data...</span>
+                        </div>
                     </div>
                 </div>
-            </div>
+            </section>
+
+            <!-- Network Status Section -->
+            <section class="network-status slide-in">
+                <div class="card">
+                    <h3>🌐 Network Configuration</h3>
+                    <div class="network-info" id="network-info">
+                        <p class="gateway">
+                            <span class="label">🔗 Gateway:</span>
+                            <span class="value small" id="gateway-url">--</span>
+                        </p>
+                        <p class="bundler">
+                            <span class="label">📦 Bundler:</span>
+                            <span class="value small" id="bundler-url">--</span>
+                        </p>
+                        <p class="backend">
+                            <span class="label">🏗️ DEX Backend:</span>
+                            <span class="value small" id="backend-url">--</span>
+                        </p>
+                    </div>
+                </div>
+            </section>
         </main>
 
         <footer class="footer">
             <p>🍺 Stay thirsty for profits, my friends.</p>
-            <p class="disclaimer">This bot is for educational purposes. Trade responsibly.</p>
+            <p class="disclaimer">This bot is for educational purposes. Trade responsibly and never invest more than you can afford to lose.</p>
+            <p class="version">v2.0 - Enhanced UI</p>
         </footer>
+    </div>
+
+    <!-- Loading overlay -->
+    <div id="loading-overlay" class="loading-overlay" style="display: none;">
+        <div class="loading-spinner">
+            <div class="spinner"></div>
+            <p>Processing transaction...</p>
+        </div>
     </div>
 
     <script src="script.js"></script>
