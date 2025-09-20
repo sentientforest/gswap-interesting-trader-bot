@@ -77,26 +77,21 @@ export class TokenRegistry {
   }
 
   private initializeKnownPairs(): void {
-    // Known high-liquidity pairs based on common DEX patterns
-    const commonPairs = [
-      // GALA pairs (main gas token, likely has most pairs)
-      'GALA|GWBTC|3000',
+    // Known pairs based on actual liquidity pool data analysis
+    const knownLiquidPairs = [
+      // GALA pairs with confirmed liquidity from liquidity_pools.json
+      'GALA|GWBTC|10000', // Confirmed: liquidity: "35826.857864843960769612"
+
+      // Common stablecoin and major token pairs (need to verify)
       'GALA|GUSDC|3000',
       'GALA|GUSDT|3000',
       'GALA|SILK|10000',
 
       // Stablecoin pairs
       'GUSDC|GUSDT|500',
-      'GUSDC|GWBTC|3000',
-      'GUSDT|GWBTC|3000',
-
-      // Alternative fee tiers
-      'GALA|GWBTC|500',
-      'GALA|GUSDC|500',
-      'GALA|SILK|3000',
     ];
 
-    commonPairs.forEach(pair => this.knownPairs.add(pair));
+    knownLiquidPairs.forEach(pair => this.knownPairs.add(pair));
   }
 
   getTokenBySymbol(symbol: string): TokenInfo | undefined {

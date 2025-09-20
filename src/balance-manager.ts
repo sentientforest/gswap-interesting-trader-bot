@@ -25,17 +25,12 @@ export class BalanceManager {
   }
 
   async getBalances(): Promise<BalanceSummary> {
-    // Use mock data if configured or if backend is unavailable
-    if (this.config.useMockData) {
-      console.log('Using mock balance data (USE_MOCK_DATA=true)');
-      return this.getMockBalances();
-    }
-
     try {
-      // Use the existing getUserAssets function
-      const { getUserAssets } = await import('./get_user_assets.js');
-      const assets = await getUserAssets(this.config.walletAddress, 1, 100);
-
+      const assets = await this.gSwap.assets.getUserAssets(
+        this.config.walletAddress,
+        1,
+        20
+      );
       let preferredTokenBalance = 0;
       let galaTokenBalance = 0;
       const otherTokens: TokenBalance[] = [];
@@ -67,34 +62,10 @@ export class BalanceManager {
       };
     } catch (error) {
       console.error('Error fetching balances:', error);
-
-      // Return mock data when backend is unavailable
-      console.warn('Using mock balance data due to backend unavailability');
-      return this.getMockBalances();
+      throw error; // Don't fall back to mock data anymore
     }
   }
 
-  private getMockBalances(): BalanceSummary {
-    return {
-      preferredTokenBalance: 0.5, // Some existing preferred token
-      galaTokenBalance: 250, // GALA balance above 2x minimum for testing excess trading
-      otherTokens: [
-        {
-          tokenKey: 'GUSDC|Unit|none|none',
-          symbol: 'GUSDC',
-          quantity: 100.50,
-          decimals: 6,
-        },
-        {
-          tokenKey: 'GUSDT|Unit|none|none',
-          symbol: 'GUSDT',
-          quantity: 75.25,
-          decimals: 6,
-        }
-      ],
-      totalTokens: 4,
-    };
-  }
 
   private constructTokenKey(token: any): string {
     // Construct the token key from the token object

@@ -80,6 +80,15 @@ app.get('/api/config', (_req, res) => {
     minimumGalaBalance: config.minimumGalaBalance,
     maxSlippage: config.maxSlippage,
     tradingEnabled: config.enableTrading,
+    transactionTimeoutMs: config.transactionTimeoutMs,
+    gswapUrls: {
+      gatewayBaseUrl: config.gatewayBaseUrl,
+      dexContractBasePath: config.dexContractBasePath,
+      tokenContractBasePath: config.tokenContractBasePath,
+      bundlerBaseUrl: config.bundlerBaseUrl,
+      bundlingAPIBasePath: config.bundlingAPIBasePath,
+      dexBackendBaseUrl: config.dexBackendBaseUrl,
+    },
   });
 });
 
@@ -97,7 +106,7 @@ app.use((error: Error, _req: express.Request, res: express.Response, _next: expr
 });
 
 // Start server
-const server = app.listen(config.port, () => {
+const server = app.listen(config.port, async () => {
   console.log('');
   console.log('=' .repeat(60));
   console.log('🍺 The Most Interesting Trader in the World - Web Interface');
@@ -107,6 +116,15 @@ const server = app.listen(config.port, () => {
   console.log(`⚡ Trading: ${config.enableTrading ? 'ENABLED' : 'DISABLED'}`);
   console.log('=' .repeat(60));
   console.log('');
+
+  // Auto-start the bot
+  try {
+    bot = new MostInterestingTraderBot(config);
+    await bot.start();
+    console.log('🚀 Bot started automatically');
+  } catch (error) {
+    console.error('❌ Failed to auto-start bot:', error instanceof Error ? error.message : String(error));
+  }
 });
 
 // Graceful shutdown

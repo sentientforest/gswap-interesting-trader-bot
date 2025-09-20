@@ -1,5 +1,42 @@
 import 'dotenv/config';
 
+/**
+ * Available Environment Variables for Bot Configuration:
+ *
+ * Token Configuration:
+ * - PREFERRED_TOKEN_KEY: Token key for preferred token (default: GALA|Unit|none|none)
+ * - PREFERRED_TOKEN_NAME: Display name for preferred token (default: $GALA)
+ * - GALA_TOKEN_KEY: Token key for GALA (default: GALA|Unit|none|none)
+ *
+ * Trading Parameters:
+ * - MINIMUM_GALA_BALANCE: Minimum GALA balance to maintain (default: 100)
+ * - TRADE_INTERVAL_MS: Trading interval in milliseconds (default: 60000)
+ * - MAX_SLIPPAGE: Maximum slippage percentage (default: 5)
+ * - TRADE_AMOUNT_PERCENTAGE: Percentage of balance to trade (default: 10)
+ *
+ * Wallet Configuration:
+ * - WALLET_ADDRESS: Your wallet address (required)
+ * - GALACHAIN_PRIVATE_KEY: Your private key (required)
+ *
+ * Server Configuration:
+ * - PORT: Server port (default: 3000)
+ *
+ * Feature Flags:
+ * - ENABLE_TRADING: Enable actual trading (default: false)
+ * - ENABLE_LOGGING: Enable logging (default: true)
+ *
+ * Transaction Settings:
+ * - TRANSACTION_TIMEOUT_MS: Transaction timeout in ms (default: 600000 = 10 minutes)
+ *
+ * GSwap SDK URL Configuration:
+ * - GSWAP_GATEWAY_BASE_URL: Gateway base URL (default: https://gateway-mainnet.galachain.com)
+ * - GSWAP_DEX_CONTRACT_BASE_PATH: DEX contract path (default: /api/asset/dexv3-contract)
+ * - GSWAP_TOKEN_CONTRACT_BASE_PATH: Token contract path (default: /api/asset/token-contract)
+ * - GSWAP_BUNDLER_BASE_URL: Bundler URL (default: https://bundle-backend-prod1.defi.gala.com)
+ * - GSWAP_BUNDLING_API_BASE_PATH: Bundling API path (default: /bundle)
+ * - GSWAP_DEX_BACKEND_BASE_URL: DEX backend URL (default: https://dex-backend-prod1.defi.gala.com)
+ */
+
 export interface BotConfig {
   // Token preferences
   preferredTokenKey: string;
@@ -22,7 +59,17 @@ export interface BotConfig {
   // Feature flags
   enableTrading: boolean;
   enableLogging: boolean;
-  useMockData: boolean;
+
+  // Transaction settings
+  transactionTimeoutMs: number;
+
+  // GSwap SDK URL configuration
+  gatewayBaseUrl: string;
+  dexContractBasePath: string;
+  tokenContractBasePath: string;
+  bundlerBaseUrl: string;
+  bundlingAPIBasePath: string;
+  dexBackendBaseUrl: string;
 }
 
 function validateTokenKey(key: string): boolean {
@@ -43,15 +90,14 @@ export function loadConfig(): BotConfig {
   }
 
   const privateKey = process.env.GALACHAIN_PRIVATE_KEY;
-  const useMockData = process.env.USE_MOCK_DATA === 'true';
 
   if (!privateKey) {
     throw new Error('GALACHAIN_PRIVATE_KEY environment variable is required');
   }
 
-  // Allow placeholder private key when using mock data
-  if (!useMockData && (privateKey === 'demo_key_placeholder' || privateKey === 'your_private_key_here')) {
-    throw new Error('Please set a real private key in GALACHAIN_PRIVATE_KEY or enable USE_MOCK_DATA=true for testing');
+  // Validate private key format
+  if (privateKey === 'demo_key_placeholder' || privateKey === 'your_private_key_here') {
+    throw new Error('Please set a real private key in GALACHAIN_PRIVATE_KEY');
   }
 
   const walletAddress = process.env.WALLET_ADDRESS;
@@ -81,7 +127,17 @@ export function loadConfig(): BotConfig {
     // Feature flags
     enableTrading: process.env.ENABLE_TRADING === 'true', // Default to false for safety
     enableLogging: process.env.ENABLE_LOGGING !== 'false', // Default to true
-    useMockData: process.env.USE_MOCK_DATA === 'true', // Default to false
+
+    // Transaction settings
+    transactionTimeoutMs: Number(process.env.TRANSACTION_TIMEOUT_MS) || 600_000, // 10 minutes default
+
+    // GSwap SDK URL configuration with defaults from SDK
+    gatewayBaseUrl: process.env.GSWAP_GATEWAY_BASE_URL || 'https://gateway-mainnet.galachain.com',
+    dexContractBasePath: process.env.GSWAP_DEX_CONTRACT_BASE_PATH || '/api/asset/dexv3-contract',
+    tokenContractBasePath: process.env.GSWAP_TOKEN_CONTRACT_BASE_PATH || '/api/asset/token-contract',
+    bundlerBaseUrl: process.env.GSWAP_BUNDLER_BASE_URL || 'https://bundle-backend-prod1.defi.gala.com',
+    bundlingAPIBasePath: process.env.GSWAP_BUNDLING_API_BASE_PATH || '/bundle',
+    dexBackendBaseUrl: process.env.GSWAP_DEX_BACKEND_BASE_URL || 'https://dex-backend-prod1.defi.gala.com',
   };
 }
 

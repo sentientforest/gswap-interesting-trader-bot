@@ -20,8 +20,16 @@ export class MostInterestingTraderBot {
     this.logger = new Logger(this.config.enableLogging);
     this.startTime = new Date();
 
-    // Initialize GSwap instance
-    const gSwap = new GSwap({});
+    // Initialize GSwap instance with configurable timeout and URLs
+    const gSwap = new GSwap({
+      transactionWaitTimeoutMs: this.config.transactionTimeoutMs,
+      gatewayBaseUrl: this.config.gatewayBaseUrl,
+      dexContractBasePath: this.config.dexContractBasePath,
+      tokenContractBasePath: this.config.tokenContractBasePath,
+      bundlerBaseUrl: this.config.bundlerBaseUrl,
+      bundlingAPIBasePath: this.config.bundlingAPIBasePath,
+      dexBackendBaseUrl: this.config.dexBackendBaseUrl,
+    });
 
     // Initialize managers
     this.balanceManager = new BalanceManager(gSwap, this.config);
@@ -43,6 +51,11 @@ export class MostInterestingTraderBot {
     this.logger.info('Starting trading bot...');
     this.logger.info(`Trade interval: ${this.config.tradeInterval}ms`);
     this.logger.info(`Trading enabled: ${this.config.enableTrading}`);
+    this.logger.info(`Transaction timeout: ${this.config.transactionTimeoutMs}ms (${this.config.transactionTimeoutMs / 60000} minutes)`);
+    this.logger.info('GSwap SDK Configuration:');
+    this.logger.info(`  Gateway: ${this.config.gatewayBaseUrl}`);
+    this.logger.info(`  Bundler: ${this.config.bundlerBaseUrl}`);
+    this.logger.info(`  DEX Backend: ${this.config.dexBackendBaseUrl}`);
 
     // Execute first trade cycle immediately
     await this.executeTradeCycle();

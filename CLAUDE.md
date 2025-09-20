@@ -22,6 +22,8 @@ The bot requires a `.env` file with the following variables:
 - `PREFERRED_TOKEN_NAME` - Display name for preferred token (default: "$GALA")
 - `ENABLE_TRADING` - Set to "true" to enable actual trading (default: false for safety)
 
+**Note**: All mock data functionality has been removed. The bot now only works with real blockchain data.
+
 Note: No test command is currently configured.
 
 ## Architecture
@@ -72,9 +74,13 @@ Note: No test command is currently configured.
 The bot implements intelligent multi-hop trading when direct token pairs don't exist:
 
 - **Token Registry**: `tokens.csv` contains known tokens and their identifiers
+- **Real Pool Discovery**: Uses actual GalaChain pool data to verify liquidity before trading
+- **Confirmed Liquidity**: GALA/GWBTC pool with 1.0% fee (10000) confirmed to have ~35,826 liquidity
 - **Path Discovery**: Automatically finds trading routes through intermediate tokens (GALA, GUSDC, GUSDT)
 - **Fallback Strategy**: Tries direct trades first, then single-hop routes through liquid pairs
-- **Route Examples**: SILK → GALA → GWBTC or GUSDT → GUSDC → GWBTC
+
+**Verified Trading Pairs:**
+- GALA ↔ GWBTC (fee: 10000, confirmed liquidity)
 
 This solves the common issue where exotic token pairs don't have direct liquidity pools.
 

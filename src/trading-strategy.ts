@@ -32,34 +32,63 @@ export class TradingStrategy {
     this.config = config;
     this.tokenRegistry = new TokenRegistry();
 
-    // Only create signer if we have a valid private key and aren't using mock data
-    const signerConfig: any = {};
-    if (!config.useMockData && config.privateKey !== 'demo_key_placeholder' && config.privateKey !== 'your_private_key_here') {
-      signerConfig.signer = new PrivateKeySigner(config.privateKey);
-    }
+    // Always create signer with the provided private key and URL configuration
+    const signerConfig: any = {
+      signer: new PrivateKeySigner(config.privateKey),
+      transactionWaitTimeoutMs: config.transactionTimeoutMs,
+      gatewayBaseUrl: config.gatewayBaseUrl,
+      dexContractBasePath: config.dexContractBasePath,
+      tokenContractBasePath: config.tokenContractBasePath,
+      bundlerBaseUrl: config.bundlerBaseUrl,
+      bundlingAPIBasePath: config.bundlingAPIBasePath,
+      dexBackendBaseUrl: config.dexBackendBaseUrl,
+    };
 
     this.gSwap = new GSwap(signerConfig);
   }
 
   async findAvailablePools(tokenA: string, tokenB: string): Promise<PoolInfo[]> {
+    console.log(`\n=== FINDING POOLS FOR ${tokenA} <-> ${tokenB} ===`);
     const pools: PoolInfo[] = [];
-    const feeTiers = [500, 3000, 10000] as const; // 0.05%, 0.3%, 1.0%
+
+    // Check all three fee tiers
+    const feeTiers = [500, 3000, 10000] as const;
+    console.log(`Checking fee tiers: ${feeTiers.join(', ')}`);
 
     for (const fee of feeTiers) {
       try {
-        // For now, we'll assume pools exist - this would need to be implemented
-        // based on the actual gSwap SDK pool query methods
-        pools.push({
-          token0: tokenA,
-          token1: tokenB,
-          fee,
-          liquidity: "1000000", // Mock liquidity
-          sqrtPrice: "1000000000000000000", // Mock price
-        });
+        console.log(`Checking pool with fee ${fee}...`);
+      
+        const poolData = await this.gSwap.pools.getPoolData(tokenA, tokenB, fee);
+
+        const liquidity = parseFloat(poolData.liquidity?.toString() || '0');
+        console.log(`  Fee ${fee}: liquidity = ${liquidity}`);
+
+        if (poolData && liquidity > 0) {
+          pools.push({
+            token0: tokenA,
+            token1: tokenB,
+            fee,
+            liquidity: poolData.liquidity.toString(),
+            sqrtPrice: poolData.sqrtPrice.toString(),
+          });
+          console.log(`  ✅ Pool with fee ${fee} has liquidity: ${liquidity}`);
+        } else {
+          console.log(`  ❌ Pool with fee ${fee} has no liquidity`);
+        }
       } catch (error) {
-        // Pool doesn't exist or has no liquidity
+        console.log(`  ❌ Pool with fee ${fee} error:`, error instanceof Error ? error.message : error);
         continue;
       }
+    }
+
+    // Sort pools by liquidity (highest first)
+    pools.sort((a, b) => parseFloat(b.liquidity) - parseFloat(a.liquidity));
+
+    console.log(`Found ${pools.length} liquid pool(s)`);
+    if (pools.length > 0) {
+      console.log('Pools sorted by liquidity:');
+      pools.forEach(p => console.log(`  - Fee ${p.fee}: liquidity = ${p.liquidity}`));
     }
 
     return pools;
@@ -71,6 +100,11 @@ export class TradingStrategy {
     amount: number,
     fee?: number
   ): Promise<TradeResult> {
+    console.log(`\n=== EXECUTE TRADE ===`);
+    console.log(`From: ${amount} ${fromToken}`);
+    console.log(`To: ${toToken}`);
+    console.log(`Fee tier: ${fee || 'auto-detect'}`);
+
     const result: TradeResult = {
       success: false,
       fromToken,
@@ -93,66 +127,85 @@ export class TradingStrategy {
       // Find available pools if fee not specified
       let poolFee = fee;
       if (!poolFee) {
+        console.log('No fee specified, searching for available pools...');
         const pools = await this.findAvailablePools(fromToken, toToken);
+        console.log(`Found ${pools.length} pool(s):`, pools.map(p => `fee=${p.fee}, liquidity=${p.liquidity}`));
+
         if (pools.length === 0) {
-          throw new Error(`No liquid pools found for ${fromToken} -> ${toToken}`);
+          const error = `No liquid pools found for ${fromToken} -> ${toToken}`;
+          console.error(error);
+          throw new Error(error);
         }
         // Choose pool with highest liquidity
         const bestPool = pools.reduce((prev, curr) =>
           parseFloat(curr.liquidity) > parseFloat(prev.liquidity) ? curr : prev
         );
         poolFee = bestPool.fee;
+        console.log(`Selected pool with fee ${poolFee} (liquidity: ${bestPool.liquidity})`);
       }
 
-      // For now, use existing quote functions from the project
-      // This would need to be adapted based on the actual SDK structure
-      const { quoteExactInput } = await import('./quote_exact_input.js');
-      const quote = await quoteExactInput(
+      const quote = await this.gSwap.quoting.quoteExactInput(
         fromToken,
         toToken,
         amount.toString(),
         poolFee as 500 | 3000 | 10000
-      );
-
-      if (!quote || !(quote as any).amountOut) {
+      ).catch((quoteError) => {
+        console.error('Quote failed:', quoteError);
+        throw new Error(`Unable to get quote: ${quoteError instanceof Error ? quoteError.message : String(quoteError)}`);
+      });
+      
+      // Check if quote has valid output amount (can be amountOut or outTokenAmount)
+      const outputAmount = (quote as any).amountOut || (quote as any).outTokenAmount;
+      if (!quote || !outputAmount) {
+        const error = `Quote returned no valid output amount. Quote object: ${JSON.stringify(quote)}`;
+        console.error(error);
         throw new Error('Unable to get quote for trade');
       }
 
       // Calculate minimum output with slippage
-      const expectedOutput = parseFloat((quote as any).amountOut.toString());
+      const expectedOutput = Math.abs(parseFloat(outputAmount.toString()));
       const minOutput = expectedOutput * (1 - this.config.maxSlippage / 100);
 
       console.log(`Trading ${amount} ${fromToken} for ${toToken}`);
       console.log(`Expected output: ${expectedOutput}, Min output: ${minOutput}`);
 
       // Connect to socket for transaction updates
-      await GSwap.events.connectEventSocket();
+      const isConnected = GSwap.events.eventSocketConnected();
 
-      // Execute the swap using existing swap function
-      const { swapTokens } = await import('./swap.js');
-      const swapResult = await swapTokens(
-        this.config.walletAddress,
+      if (!isConnected) {
+        await GSwap.events.connectEventSocket(this.config.bundlerBaseUrl ?? 'https://bundle-backend-prod1.defi.gala.com');
+      }
+
+      console.log('Submitting swap transaction...');
+      const pendingTx = await this.gSwap.swaps.swap(
         fromToken,
         toToken,
-        poolFee as 500 | 3000 | 10000,
+        poolFee,
         {
           exactIn: amount.toString(),
           amountOutMinimum: minOutput.toString(),
-        }
+        },
+        this.config.walletAddress
       );
 
-      // Assume swap was successful if no error thrown
-      result.success = true;
-      result.amountOut = expectedOutput; // Use expected output for now
-      result.transactionId = 'mock-tx-id'; // Mock transaction ID
-      console.log(`Trade successful! Received ${result.amountOut} ${toToken}`);
+      console.log(`Transaction submitted with ID: ${pendingTx.transactionId}`);
+      console.log('Waiting for transaction to complete...');
+
+      await pendingTx.wait()
+      .then(() => {
+        console.log('Transaction completed successfully!');
+        result.success = true;
+        result.amountOut = expectedOutput; // Use expected output for now
+        result.transactionId = pendingTx.transactionId; 
+        console.log(`Trade successful! Received ${result.amountOut} ${toToken}`);
+      }).catch((error) => {
+        result.error = error instanceof Error ? error.message : String(error);
+        console.error(`Trade failed: ${result.error}`);
+      });    
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
       console.error(`Trade failed: ${result.error}`);
-    } finally {
-      // Disconnect socket
-      GSwap.events.disconnectEventSocket();
-    }
+    } 
 
     // Store in history
     this.tradeHistory.push(result);
@@ -211,39 +264,74 @@ export class TradingStrategy {
     toToken: string,
     amount: number
   ): Promise<TradeResult> {
-    console.log(`Attempting multi-hop trade: ${amount} ${fromToken} -> ${toToken}`);
+    console.log(`\n=== MULTI-HOP TRADE ANALYSIS ===`);
+    console.log(`Attempting to trade: ${amount} ${fromToken} -> ${toToken}`);
+
+    // First try direct trade
+    console.log('\n1. Trying DIRECT trade...');
+    try {
+      const directResult = await this.executeTrade(fromToken, toToken, amount);
+      if (directResult.success) {
+        console.log('✅ Direct trade successful!');
+        return directResult;
+      }
+    } catch (directError) {
+      console.log('❌ Direct trade failed:', directError instanceof Error ? directError.message : directError);
+    }
+
+    // If direct trade fails, try multi-hop
+    console.log('\n2. Direct trade failed, trying MULTI-HOP routes...');
 
     // Find the best trading path
     const paths = this.tokenRegistry.findTradingPaths(fromToken, toToken, 2);
 
     if (paths.length === 0) {
-      throw new Error(`No trading path found from ${fromToken} to ${toToken}`);
+      const error = `No trading path found from ${fromToken} to ${toToken}`;
+      console.error(error);
+      throw new Error(error);
     }
 
-    console.log(`Found ${paths.length} potential paths:`, paths);
+    console.log(`Found ${paths.length} potential path(s):`);
+    paths.forEach((path, i) => console.log(`  Path ${i + 1}: ${path.join(' -> ')}`));
 
     // Try each path until one works
-    for (const path of paths) {
+    for (let i = 0; i < paths.length; i++) {
+      const path = paths[i];
+      if (!path) continue;
+
+      console.log(`\nTrying path ${i + 1}/${paths.length}: ${path.join(' -> ')}`);
+
       try {
         if (path.length === 2) {
-          // Direct trade
-          return await this.executeTrade(fromToken, toToken, amount);
+          // This is a direct trade (already tried above)
+          console.log('Skipping direct path (already attempted)');
+          continue;
         } else if (path.length === 3) {
           // Two-hop trade
           const [token0, intermediate, token1] = path;
           if (!token0 || !intermediate || !token1) continue;
 
-          console.log(`Trying two-hop: ${token0} -> ${intermediate} -> ${token1}`);
+          console.log(`\nExecuting two-hop trade:`);
+          console.log(`  Hop 1: ${token0} -> ${intermediate}`);
+          console.log(`  Hop 2: ${intermediate} -> ${token1}`);
 
           // First hop
+          console.log(`\nExecuting Hop 1: ${amount} ${token0} -> ${intermediate}`);
           const firstResult = await this.executeTrade(token0, intermediate, amount);
           if (!firstResult.success || !firstResult.amountOut) {
+            console.log(`❌ Hop 1 failed`);
             continue; // Try next path
           }
+          console.log(`✅ Hop 1 successful: received ${firstResult.amountOut} ${intermediate}`);
 
           // Second hop
+          console.log(`\nExecuting Hop 2: ${firstResult.amountOut} ${intermediate} -> ${token1}`);
           const secondResult = await this.executeTrade(intermediate, token1, firstResult.amountOut);
           if (secondResult.success && secondResult.amountOut) {
+            console.log(`✅ Hop 2 successful: received ${secondResult.amountOut} ${token1}`);
+            console.log(`\n✅ MULTI-HOP TRADE COMPLETE!`);
+            console.log(`  Total: ${amount} ${fromToken} -> ${secondResult.amountOut} ${toToken}`);
+
             // Return combined result
             return {
               success: true,
@@ -254,16 +342,20 @@ export class TradingStrategy {
               transactionId: `multi-hop-${firstResult.transactionId || 'unknown'}-${secondResult.transactionId || 'unknown'}`,
               timestamp: new Date(),
             };
+          } else {
+            console.log(`❌ Hop 2 failed`);
           }
         }
       } catch (error) {
-        console.log(`Path ${path.join(' -> ')} failed:`, error instanceof Error ? error.message : error);
+        console.log(`❌ Path failed:`, error instanceof Error ? error.message : error);
         continue; // Try next path
       }
     }
 
     // All paths failed
-    throw new Error(`All trading paths failed for ${fromToken} -> ${toToken}`);
+    const error = `All trading paths failed for ${fromToken} -> ${toToken}`;
+    console.error(`\n❌ ${error}`);
+    throw new Error(error);
   }
 
   getTradeHistory(limit?: number): TradeResult[] {
