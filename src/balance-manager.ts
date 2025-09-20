@@ -76,23 +76,23 @@ export class BalanceManager {
 
   private getMockBalances(): BalanceSummary {
     return {
-      preferredTokenBalance: 0,
-      galaTokenBalance: 150, // Mock some GALA balance above minimum
+      preferredTokenBalance: 0.5, // Some existing preferred token
+      galaTokenBalance: 250, // GALA balance above 2x minimum for testing excess trading
       otherTokens: [
         {
-          tokenKey: 'SILK|Unit|none|none',
-          symbol: 'SILK',
-          quantity: 50.25,
-          decimals: 8,
+          tokenKey: 'GUSDC|Unit|none|none',
+          symbol: 'GUSDC',
+          quantity: 100.50,
+          decimals: 6,
         },
         {
           tokenKey: 'GUSDT|Unit|none|none',
           symbol: 'GUSDT',
-          quantity: 25.50,
-          decimals: 8,
+          quantity: 75.25,
+          decimals: 6,
         }
       ],
-      totalTokens: 3,
+      totalTokens: 4,
     };
   }
 

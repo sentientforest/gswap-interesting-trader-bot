@@ -1,6 +1,7 @@
 import { GSwap, PrivateKeySigner } from '@gala-chain/gswap-sdk';
 import { BotConfig } from './config.js';
 import { TokenBalance } from './balance-manager.js';
+import { TokenRegistry } from './token-registry.js';
 
 export interface TradeResult {
   success: boolean;
@@ -25,9 +26,11 @@ export class TradingStrategy {
   private gSwap: GSwap;
   private config: BotConfig;
   private tradeHistory: TradeResult[] = [];
+  private tokenRegistry: TokenRegistry;
 
   constructor(config: BotConfig) {
     this.config = config;
+    this.tokenRegistry = new TokenRegistry();
 
     // Only create signer if we have a valid private key and aren't using mock data
     const signerConfig: any = {};
@@ -185,7 +188,8 @@ export class TradingStrategy {
 
       console.log(`Executing trade: ${trade.amount} ${trade.token.symbol} -> ${trade.targetToken}`);
 
-      const result = await this.executeTrade(
+      // Try multi-hop trading which includes direct trading as fallback
+      const result = await this.executeMultiHopTrade(
         trade.token.tokenKey,
         trade.targetToken,
         trade.amount
@@ -200,6 +204,66 @@ export class TradingStrategy {
     }
 
     return results;
+  }
+
+  async executeMultiHopTrade(
+    fromToken: string,
+    toToken: string,
+    amount: number
+  ): Promise<TradeResult> {
+    console.log(`Attempting multi-hop trade: ${amount} ${fromToken} -> ${toToken}`);
+
+    // Find the best trading path
+    const paths = this.tokenRegistry.findTradingPaths(fromToken, toToken, 2);
+
+    if (paths.length === 0) {
+      throw new Error(`No trading path found from ${fromToken} to ${toToken}`);
+    }
+
+    console.log(`Found ${paths.length} potential paths:`, paths);
+
+    // Try each path until one works
+    for (const path of paths) {
+      try {
+        if (path.length === 2) {
+          // Direct trade
+          return await this.executeTrade(fromToken, toToken, amount);
+        } else if (path.length === 3) {
+          // Two-hop trade
+          const [token0, intermediate, token1] = path;
+          if (!token0 || !intermediate || !token1) continue;
+
+          console.log(`Trying two-hop: ${token0} -> ${intermediate} -> ${token1}`);
+
+          // First hop
+          const firstResult = await this.executeTrade(token0, intermediate, amount);
+          if (!firstResult.success || !firstResult.amountOut) {
+            continue; // Try next path
+          }
+
+          // Second hop
+          const secondResult = await this.executeTrade(intermediate, token1, firstResult.amountOut);
+          if (secondResult.success && secondResult.amountOut) {
+            // Return combined result
+            return {
+              success: true,
+              fromToken,
+              toToken,
+              amountIn: amount,
+              amountOut: secondResult.amountOut,
+              transactionId: `multi-hop-${firstResult.transactionId || 'unknown'}-${secondResult.transactionId || 'unknown'}`,
+              timestamp: new Date(),
+            };
+          }
+        }
+      } catch (error) {
+        console.log(`Path ${path.join(' -> ')} failed:`, error instanceof Error ? error.message : error);
+        continue; // Try next path
+      }
+    }
+
+    // All paths failed
+    throw new Error(`All trading paths failed for ${fromToken} -> ${toToken}`);
   }
 
   getTradeHistory(limit?: number): TradeResult[] {

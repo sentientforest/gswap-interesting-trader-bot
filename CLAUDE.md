@@ -51,7 +51,8 @@ Note: No test command is currently configured.
 
 5. **Bot Components**:
    - `balance-manager.ts` - Asset tracking and trading decision logic
-   - `trading-strategy.ts` - Swap execution and pool discovery
+   - `trading-strategy.ts` - Multi-hop swap execution and pool discovery
+   - `token-registry.ts` - CSV-based token database and trading path discovery
    - `config.ts` - Environment variable management and validation
    - `logger.ts` - Comprehensive logging system with file output
 
@@ -65,6 +66,17 @@ Note: No test command is currently configured.
 - Token identifiers follow the format: `"SYMBOL|Unit|none|none"`
 - Wallet addresses use format: `"eth|<address>"` or `"client|<address>"`
 - Fee tiers are limited to: 500 (0.05%), 3000 (0.3%), 10000 (1.0%)
+
+### Multi-Hop Trading
+
+The bot implements intelligent multi-hop trading when direct token pairs don't exist:
+
+- **Token Registry**: `tokens.csv` contains known tokens and their identifiers
+- **Path Discovery**: Automatically finds trading routes through intermediate tokens (GALA, GUSDC, GUSDT)
+- **Fallback Strategy**: Tries direct trades first, then single-hop routes through liquid pairs
+- **Route Examples**: SILK → GALA → GWBTC or GUSDT → GUSDC → GWBTC
+
+This solves the common issue where exotic token pairs don't have direct liquidity pools.
 
 ## TypeScript Configuration
 
