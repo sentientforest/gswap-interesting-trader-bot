@@ -14,6 +14,15 @@ import 'dotenv/config';
  * - MAX_SLIPPAGE: Maximum slippage percentage (default: 5)
  * - TRADE_AMOUNT_PERCENTAGE: Percentage of balance to trade (default: 10)
  *
+ * Arbitrage Configuration:
+ * - ENABLE_ARBITRAGE: Enable arbitrage detection and execution (default: false)
+ * - ARBITRAGE_CHECK_INTERVAL_MS: Arbitrage scan interval in milliseconds (default: 120000 = 2 minutes)
+ * - ARBITRAGE_MIN_PROFIT_PERCENT: Minimum profit percentage to execute (default: 1.0)
+ * - ARBITRAGE_MAX_TRADE_SIZE: Maximum amount to use per arbitrage (default: 100)
+ * - ARBITRAGE_MAX_HOPS: Maximum hops for circular paths (default: 3)
+ * - ARBITRAGE_MIN_LIQUIDITY: Minimum pool liquidity to consider (default: 1000)
+ * - ARBITRAGE_POOL_CACHE_TTL: Pool data cache TTL in ms (default: 60000 = 1 minute)
+ *
  * Wallet Configuration:
  * - WALLET_ADDRESS: Your wallet address (required)
  * - GALACHAIN_PRIVATE_KEY: Your private key (required)
@@ -48,6 +57,15 @@ export interface BotConfig {
   tradeInterval: number; // milliseconds
   maxSlippage: number; // percentage
   tradeAmountPercentage: number; // percentage of balance to trade
+
+  // Arbitrage parameters
+  enableArbitrage: boolean;
+  arbitrageCheckInterval: number; // milliseconds
+  arbitrageMinProfitPercent: number; // minimum profit percentage
+  arbitrageMaxTradeSize: number; // maximum GALA to use per arbitrage
+  arbitrageMaxHops: number; // maximum hops in circular path
+  arbitrageMinLiquidity: number; // minimum pool liquidity to consider
+  arbitragePoolCacheTTL: number; // pool data cache TTL in milliseconds
 
   // Wallet configuration
   walletAddress: string;
@@ -116,6 +134,15 @@ export function loadConfig(): BotConfig {
     tradeInterval: Number(process.env.TRADE_INTERVAL_MS) || 60000, // 1 minute default
     maxSlippage: Number(process.env.MAX_SLIPPAGE) || 5, // 5% default
     tradeAmountPercentage: Number(process.env.TRADE_AMOUNT_PERCENTAGE) || 10, // 10% of balance default
+
+    // Arbitrage parameters with defaults
+    enableArbitrage: process.env.ENABLE_ARBITRAGE === 'true', // Default to false for safety
+    arbitrageCheckInterval: Number(process.env.ARBITRAGE_CHECK_INTERVAL_MS) || 120_000, // 2 minutes default
+    arbitrageMinProfitPercent: Number(process.env.ARBITRAGE_MIN_PROFIT_PERCENT) || 1.0, // 1% minimum profit
+    arbitrageMaxTradeSize: Number(process.env.ARBITRAGE_MAX_TRADE_SIZE) || 100, // 100 GALA max
+    arbitrageMaxHops: Number(process.env.ARBITRAGE_MAX_HOPS) || 3, // 3 hops maximum
+    arbitrageMinLiquidity: Number(process.env.ARBITRAGE_MIN_LIQUIDITY) || 1000, // 1000 minimum liquidity
+    arbitragePoolCacheTTL: Number(process.env.ARBITRAGE_POOL_CACHE_TTL) || 60_000, // 1 minute cache
 
     // Wallet configuration
     walletAddress,

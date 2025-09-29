@@ -3,16 +3,20 @@ import { loadConfig, getTagline, BotConfig } from './config.js';
 import { BalanceManager, BalanceSummary } from './balance-manager.js';
 import { TradingStrategy, TradeResult } from './trading-strategy.js';
 import { Logger } from './logger.js';
+import { ArbitrageDetector } from './arbitrage-detector.js';
 
 export class MostInterestingTraderBot {
   private config: BotConfig;
   private balanceManager: BalanceManager;
   private tradingStrategy: TradingStrategy;
+  private arbitrageDetector: ArbitrageDetector | null = null;
   private logger: Logger;
   private isRunning: boolean = false;
   private intervalId: NodeJS.Timeout | null = null;
+  private arbitrageIntervalId: NodeJS.Timeout | null = null;
   private lastBalanceCheck: BalanceSummary | null = null;
   private lastTradeTime: Date | null = null;
+  private lastArbitrageScanTime: Date | null = null;
   private startTime: Date;
 
   constructor(config?: BotConfig) {
@@ -35,6 +39,11 @@ export class MostInterestingTraderBot {
     this.balanceManager = new BalanceManager(gSwap, this.config);
     this.tradingStrategy = new TradingStrategy(this.config);
 
+    // Initialize arbitrage detector if enabled
+    if (this.config.enableArbitrage) {
+      this.arbitrageDetector = new ArbitrageDetector(this.config);
+    }
+
     this.logger.info('=' .repeat(60));
     this.logger.info('The Most Interesting Trader in the World');
     this.logger.info(getTagline(this.config));
@@ -51,6 +60,11 @@ export class MostInterestingTraderBot {
     this.logger.info('Starting trading bot...');
     this.logger.info(`Trade interval: ${this.config.tradeInterval}ms`);
     this.logger.info(`Trading enabled: ${this.config.enableTrading}`);
+    this.logger.info(`Arbitrage enabled: ${this.config.enableArbitrage}`);
+    if (this.config.enableArbitrage) {
+      this.logger.info(`Arbitrage scan interval: ${this.config.arbitrageCheckInterval}ms`);
+      this.logger.info(`Min profit threshold: ${this.config.arbitrageMinProfitPercent}%`);
+    }
     this.logger.info(`Transaction timeout: ${this.config.transactionTimeoutMs}ms (${this.config.transactionTimeoutMs / 60000} minutes)`);
     this.logger.info('GSwap SDK Configuration:');
     this.logger.info(`  Gateway: ${this.config.gatewayBaseUrl}`);
@@ -64,6 +78,17 @@ export class MostInterestingTraderBot {
     this.intervalId = setInterval(async () => {
       await this.executeTradeCycle();
     }, this.config.tradeInterval);
+
+    // Set up arbitrage scanning if enabled
+    if (this.config.enableArbitrage && this.arbitrageDetector) {
+      // Execute first arbitrage scan immediately
+      await this.executeArbitrageScan();
+
+      // Set up periodic arbitrage scanning
+      this.arbitrageIntervalId = setInterval(async () => {
+        await this.executeArbitrageScan();
+      }, this.config.arbitrageCheckInterval);
+    }
 
     this.logger.info('Bot started successfully');
   }
@@ -79,6 +104,11 @@ export class MostInterestingTraderBot {
     if (this.intervalId) {
       clearInterval(this.intervalId);
       this.intervalId = null;
+    }
+
+    if (this.arbitrageIntervalId) {
+      clearInterval(this.arbitrageIntervalId);
+      this.arbitrageIntervalId = null;
     }
 
     this.logger.info('Bot stopped');
@@ -140,7 +170,61 @@ export class MostInterestingTraderBot {
       this.logger.error(`Trade cycle failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    this.logger.info(`Trade cycle completed`);
+    this.logger.info(`Trade cycle completed. Next trade cycle in ${this.config.tradeInterval}ms`);
+    this.logger.info('-' .repeat(40));
+  }
+
+  private async executeArbitrageScan(): Promise<void> {
+    if (!this.arbitrageDetector) return;
+
+    this.logger.info('');
+    this.logger.info(`Starting arbitrage scan at ${new Date().toISOString()}`);
+
+    try {
+      // Use GALA as base token, with configured max trade size
+      const opportunities = await this.arbitrageDetector.findArbitrageOpportunities(
+        this.config.preferredTokenKey,
+        this.config.arbitrageMaxTradeSize,
+        this.config.arbitrageMaxHops
+      );
+
+      this.lastArbitrageScanTime = new Date();
+
+      if (opportunities.length === 0) {
+        this.logger.info('No profitable arbitrage opportunities found');
+        return;
+      }
+
+      // Execute the most profitable opportunity
+      const bestOpportunity = opportunities[0];
+      if (!bestOpportunity) return;
+
+      this.logger.info(`\nFound profitable arbitrage opportunity:`);
+      this.logger.info(`  ${bestOpportunity.path.tokens.map(t => t.split('|')[0]).join(' → ')}`);
+      this.logger.info(`  Expected profit: ${bestOpportunity.netProfit.toFixed(4)} (${bestOpportunity.profitPercentage.toFixed(2)}%)`);
+
+      if (this.config.enableTrading) {
+        const result = await this.tradingStrategy.executeArbitrageOpportunity(bestOpportunity);
+        this.arbitrageDetector.recordExecution(result);
+
+        if (result.success && result.actualProfit) {
+          this.logger.info(`\n✅ Arbitrage executed successfully!`);
+          this.logger.info(`  Actual profit: ${result.actualProfit.toFixed(4)}`);
+        } else {
+          this.logger.error(`\n❌ Arbitrage execution failed: ${result.error || 'Unknown error'}`);
+        }
+      } else {
+        this.logger.info('[DRY RUN] Would execute this arbitrage opportunity');
+      }
+
+      // Clear expired pool cache
+      this.arbitrageDetector.clearExpiredCache();
+
+    } catch (error) {
+      this.logger.error(`Arbitrage scan failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+
+    this.logger.info(`Arbitrage scan completed. Next scan in ${this.config.arbitrageCheckInterval}ms`);
     this.logger.info('-' .repeat(40));
   }
 
@@ -149,7 +233,7 @@ export class MostInterestingTraderBot {
     const tradeHistory = this.tradingStrategy.getTradeHistory(10);
     const volume = this.tradingStrategy.getTotalVolume();
 
-    return {
+    const status: any = {
       isRunning: this.isRunning,
       config: {
         preferredToken: this.config.preferredTokenName,
@@ -157,6 +241,7 @@ export class MostInterestingTraderBot {
         walletAddress: this.config.walletAddress,
         tradeInterval: this.config.tradeInterval,
         tradingEnabled: this.config.enableTrading,
+        arbitrageEnabled: this.config.enableArbitrage,
       },
       uptime: {
         milliseconds: uptime,
@@ -171,6 +256,19 @@ export class MostInterestingTraderBot {
       },
       recentTrades: tradeHistory,
     };
+
+    // Add arbitrage stats if enabled
+    if (this.config.enableArbitrage && this.arbitrageDetector) {
+      const arbStats = this.arbitrageDetector.getStatistics();
+      status.arbitrage = {
+        lastScanTime: this.lastArbitrageScanTime,
+        statistics: arbStats,
+        recentOpportunities: this.arbitrageDetector.getDetectionHistory(5),
+        recentExecutions: this.arbitrageDetector.getExecutionHistory(5),
+      };
+    }
+
+    return status;
   }
 
   private formatUptime(ms: number): string {

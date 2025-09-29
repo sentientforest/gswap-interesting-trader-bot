@@ -42,6 +42,10 @@ export class BalanceManager {
 
         if (tokenKey === this.config.preferredTokenKey) {
           preferredTokenBalance = balance;
+          // If preferred token is GALA, also set galaTokenBalance
+          if (tokenKey === this.config.galaTokenKey) {
+            galaTokenBalance = balance;
+          }
         } else if (tokenKey === this.config.galaTokenKey) {
           galaTokenBalance = balance;
         } else {
@@ -109,11 +113,16 @@ export class BalanceManager {
       if (excess <= 0) return 0;
 
       // Trade a percentage of the excess, but keep some buffer
-      return Math.floor(excess * (this.config.tradeAmountPercentage / 100) * 0.5);
+      // Don't floor - allow fractional amounts for tokens with decimals
+      return excess * (this.config.tradeAmountPercentage / 100) * 0.5;
     }
 
     // For other tokens, trade the configured percentage
-    return Math.floor(tokenBalance * (this.config.tradeAmountPercentage / 100));
+    // Don't floor - allow fractional amounts for tokens with decimals
+    const amount = tokenBalance * (this.config.tradeAmountPercentage / 100);
+
+    // Only trade if amount is meaningful (> 0.000001 to avoid dust)
+    return amount > 0.000001 ? amount : 0;
   }
 
   getTokensToTrade(balance: BalanceSummary): Array<{ token: TokenBalance; targetToken: string; amount: number }> {

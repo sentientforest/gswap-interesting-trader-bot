@@ -2,6 +2,8 @@ import { GSwap, PrivateKeySigner } from '@gala-chain/gswap-sdk';
 import { BotConfig } from './config.js';
 import { TokenBalance } from './balance-manager.js';
 import { TokenRegistry } from './token-registry.js';
+import { ArbitrageOpportunity } from './profit-calculator.js';
+import { ArbitrageResult } from './arbitrage-detector.js';
 
 export interface TradeResult {
   success: boolean;
@@ -405,5 +407,91 @@ export class TradingStrategy {
     lines.push('===============================');
 
     return lines.join('\n');
+  }
+
+  /**
+   * Execute circular arbitrage opportunity
+   */
+  async executeArbitrageOpportunity(opportunity: ArbitrageOpportunity): Promise<ArbitrageResult> {
+    console.log(`\n=== EXECUTING ARBITRAGE OPPORTUNITY ===`);
+    const pathStr = opportunity.path.tokens.map(t => t.split('|')[0]).join(' → ');
+    console.log(`Path: ${pathStr}`);
+    console.log(`Expected profit: ${opportunity.netProfit.toFixed(4)} (${opportunity.profitPercentage.toFixed(2)}%)`);
+
+    const startTime = Date.now();
+    const result: ArbitrageResult = {
+      opportunity,
+      success: false,
+      transactionIds: [],
+      executionTime: 0,
+    };
+
+    // If trading is disabled, simulate execution
+    if (!this.config.enableTrading) {
+      console.log(`[DRY RUN] Would execute arbitrage with ${opportunity.inputAmount} input`);
+      result.success = true;
+      result.actualOutputAmount = opportunity.expectedOutputAmount;
+      result.actualProfit = opportunity.netProfit;
+      result.transactionIds = [`mock-arb-${Date.now()}`];
+      result.executionTime = Date.now() - startTime;
+      return result;
+    }
+
+    try {
+      // Execute each hop sequentially
+      let currentAmount = opportunity.inputAmount;
+
+      for (let i = 0; i < opportunity.path.hops; i++) {
+        const tokenIn = opportunity.path.tokens[i];
+        const tokenOut = opportunity.path.tokens[i + 1];
+        const fee = opportunity.path.fees[i];
+
+        if (!tokenIn || !tokenOut || !fee) {
+          throw new Error(`Invalid path data at hop ${i}`);
+        }
+
+        console.log(`\nExecuting hop ${i + 1}/${opportunity.path.hops}: ${currentAmount.toFixed(6)} ${tokenIn.split('|')[0]} → ${tokenOut.split('|')[0]}`);
+
+        // Execute the trade
+        const tradeResult = await this.executeTrade(tokenIn, tokenOut, currentAmount, fee);
+
+        if (!tradeResult.success || !tradeResult.amountOut) {
+          throw new Error(`Hop ${i + 1} failed: ${tradeResult.error || 'Unknown error'}`);
+        }
+
+        if (tradeResult.transactionId) {
+          result.transactionIds.push(tradeResult.transactionId);
+        }
+
+        // Update amount for next hop
+        currentAmount = tradeResult.amountOut;
+        console.log(`✅ Hop ${i + 1} complete: received ${currentAmount.toFixed(6)} ${tokenOut.split('|')[0]}`);
+
+        // Small delay between hops to avoid rate limiting
+        if (i < opportunity.path.hops - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+      }
+
+      // Calculate actual profit
+      result.actualOutputAmount = currentAmount;
+      result.actualProfit = currentAmount - opportunity.inputAmount;
+      result.success = true;
+
+      console.log(`\n✅ ARBITRAGE COMPLETE!`);
+      console.log(`Input: ${opportunity.inputAmount.toFixed(4)}`);
+      console.log(`Output: ${currentAmount.toFixed(4)}`);
+      console.log(`Actual Profit: ${result.actualProfit.toFixed(4)} (${((result.actualProfit / opportunity.inputAmount) * 100).toFixed(2)}%)`);
+      console.log(`Expected Profit: ${opportunity.netProfit.toFixed(4)} (${opportunity.profitPercentage.toFixed(2)}%)`);
+
+    } catch (error) {
+      result.error = error instanceof Error ? error.message : String(error);
+      console.error(`\n❌ ARBITRAGE FAILED: ${result.error}`);
+    }
+
+    result.executionTime = Date.now() - startTime;
+    console.log(`Execution time: ${result.executionTime}ms`);
+
+    return result;
   }
 }
