@@ -3,6 +3,7 @@ import { PoolDataManager, PoolData } from './pool-data-manager.js';
 import { CircularPathFinder, CircularPath } from './circular-path-finder.js';
 import { ProfitCalculator, ArbitrageOpportunity } from './profit-calculator.js';
 import { TokenRegistry } from './token-registry.js';
+import { PoolRegistry } from './pool-registry.js';
 
 export interface ArbitrageResult {
   opportunity: ArbitrageOpportunity;
@@ -20,6 +21,7 @@ export class ArbitrageDetector {
   private pathFinder: CircularPathFinder;
   private profitCalculator: ProfitCalculator;
   private tokenRegistry: TokenRegistry;
+  private poolRegistry: PoolRegistry;
   private detectionHistory: ArbitrageOpportunity[] = [];
   private executionHistory: ArbitrageResult[] = [];
 
@@ -32,6 +34,7 @@ export class ArbitrageDetector {
     this.pathFinder = new CircularPathFinder();
     this.profitCalculator = new ProfitCalculator(config);
     this.tokenRegistry = new TokenRegistry();
+    this.poolRegistry = new PoolRegistry();
   }
 
   /**
@@ -110,47 +113,29 @@ export class ArbitrageDetector {
    * Preload pool data for known token pairs
    */
   private async preloadKnownPools(): Promise<void> {
-    console.log('\nPreloading pool data for known token pairs...');
+    console.log('\nPreloading pool data from registry...');
 
-    // Get all known tokens
-    const tokens = this.tokenRegistry.getAllTokens();
-    const tokenKeys = tokens.map(t => t.tokenKey);
+    // Get all known pools from CSV
+    const knownPools = this.poolRegistry.getPoolsWithMinLiquidity(this.config.arbitrageMinLiquidity);
 
-    // Try to load pools for common pairs
-    const feeTiers = [500, 3000, 10000];
-    const poolsToLoad: Array<{ token0: string; token1: string; fee: number }> = [];
-
-    // Create pairs for all token combinations
-    for (let i = 0; i < tokenKeys.length; i++) {
-      for (let j = i + 1; j < tokenKeys.length; j++) {
-        const token0 = tokenKeys[i];
-        const token1 = tokenKeys[j];
-
-        if (!token0 || !token1) continue;
-
-        for (const fee of feeTiers) {
-          poolsToLoad.push({ token0, token1, fee });
-        }
-      }
-    }
-
-    console.log(`Attempting to load ${poolsToLoad.length} potential pools...`);
+    console.log(`Attempting to load ${knownPools.length} pools from registry...`);
 
     let successCount = 0;
     let failCount = 0;
 
-    // Load pools (with error handling for pools that don't exist)
-    for (const { token0, token1, fee } of poolsToLoad) {
+    // Load each known pool
+    for (const pool of knownPools) {
       try {
-        await this.poolDataManager.getCompositePoolData(token0, token1, fee);
+        await this.poolDataManager.getCompositePoolData(pool.token0, pool.token1, pool.fee);
         successCount++;
       } catch (error) {
-        // Pool doesn't exist or failed to load, skip silently
+        // Pool failed to load
         failCount++;
+        console.log(`Failed to load pool ${pool.token0.split('|')[0]}/${pool.token1.split('|')[0]} (fee: ${pool.fee})`);
       }
     }
 
-    console.log(`Successfully loaded ${successCount} pool(s), ${failCount} failed/not found`);
+    console.log(`Successfully loaded ${successCount} pool(s), ${failCount} failed`);
   }
 
   /**
