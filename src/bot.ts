@@ -64,6 +64,7 @@ export class MostInterestingTraderBot {
     if (this.config.enableArbitrage) {
       this.logger.info(`Arbitrage scan interval: ${this.config.arbitrageCheckInterval}ms`);
       this.logger.info(`Min profit threshold: ${this.config.arbitrageMinProfitPercent}%`);
+      this.logger.info(`Arbitrage trade size: ${this.config.arbitrageMaxTradeSize}`);
     }
     this.logger.info(`Transaction timeout: ${this.config.transactionTimeoutMs}ms (${this.config.transactionTimeoutMs / 60000} minutes)`);
     this.logger.info('GSwap SDK Configuration:');
