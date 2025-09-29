@@ -18,7 +18,7 @@ export class OfflineQuoteEngine {
   async quoteExactInput(
     poolData: PoolData,
     tokenIn: string,
-    tokenOut: string,
+    _tokenOut: string,
     amountIn: number | string
   ): Promise<OfflineQuoteResult> {
     // Determine trade direction (zeroForOne)
@@ -41,21 +41,21 @@ export class OfflineQuoteEngine {
       poolData.compositePool
     );
 
-    // Perform offline quote calculation
-    const quoteResult = await quoteExactAmount(null, quoteDto);
+    // Perform offline quote calculation (context is not used by quoteExactAmount)
+    const quoteResult = await quoteExactAmount(null as any, quoteDto);
 
     // Calculate price impact
-    const currentPrice = new BigNumber(quoteResult.currentSqrtPrice).pow(2);
-    const newPrice = new BigNumber(quoteResult.newSqrtPrice).pow(2);
+    const currentPrice = new BigNumber(quoteResult.currentSqrtPrice.toString());
+    const newPrice = new BigNumber(quoteResult.newSqrtPrice.toString());
     const priceImpact = currentPrice.isZero()
       ? 0
       : newPrice.minus(currentPrice).dividedBy(currentPrice).multipliedBy(100).toNumber();
 
     return {
-      amountIn: zeroForOne ? quoteResult.amount0 : quoteResult.amount1,
-      amountOut: zeroForOne ? quoteResult.amount1 : quoteResult.amount0,
-      currentSqrtPrice: quoteResult.currentSqrtPrice,
-      newSqrtPrice: quoteResult.newSqrtPrice,
+      amountIn: zeroForOne ? quoteResult.amount0.toString() : quoteResult.amount1.toString(),
+      amountOut: zeroForOne ? quoteResult.amount1.toString() : quoteResult.amount0.toString(),
+      currentSqrtPrice: quoteResult.currentSqrtPrice.toString(),
+      newSqrtPrice: quoteResult.newSqrtPrice.toString(),
       priceImpact: Math.abs(priceImpact),
     };
   }

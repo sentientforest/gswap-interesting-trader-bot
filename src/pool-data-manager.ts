@@ -113,35 +113,33 @@ export class PoolDataManager {
     pool.tickSpacing = responseData.pool.tickSpacing;
     pool.maxLiquidityPerTick = new BigNumber(responseData.pool.maxLiquidityPerTick);
 
-    // 2. Create tick data map with proper TickData objects
-    const tickDataMap: Record<string, TickData> = {};
+    // 2. Create tick data map with proper TickData objects and BigNumber conversions
+    const tickDataMap: Record<string, any> = {};
     Object.keys(responseData.tickDataMap).forEach(tickKey => {
       const tickData = responseData.tickDataMap[tickKey];
       tickDataMap[tickKey] = new TickData(
         tickData.poolHash,
-        tickData.tick,
-        {
-          initialised: tickData.initialised,
-          liquidityNet: new BigNumber(tickData.liquidityNet),
-          liquidityGross: new BigNumber(tickData.liquidityGross),
-          feeGrowthOutside0: new BigNumber(tickData.feeGrowthOutside0),
-          feeGrowthOutside1: new BigNumber(tickData.feeGrowthOutside1),
-        }
+        tickData.tick
       );
+      // Manually set the info properties with BigNumber conversions
+      (tickDataMap[tickKey] as any).info = {
+        initialised: tickData.initialised,
+        liquidityNet: new BigNumber(tickData.liquidityNet),
+        liquidityGross: new BigNumber(tickData.liquidityGross),
+        feeGrowthOutside0: new BigNumber(tickData.feeGrowthOutside0),
+        feeGrowthOutside1: new BigNumber(tickData.feeGrowthOutside1),
+      };
     });
 
-    // 3. Create TokenBalance objects
+    // 3. Create TokenBalance objects with BigNumber conversions
     const token0Balance = new TokenBalance({
       owner: responseData.token0Balance.owner,
       collection: responseData.token0Balance.collection,
       category: responseData.token0Balance.category,
       type: responseData.token0Balance.type,
       additionalKey: responseData.token0Balance.additionalKey,
-      instanceIds: responseData.token0Balance.instanceIds,
-      lockedHolds: responseData.token0Balance.lockedHolds,
-      inUseHolds: responseData.token0Balance.inUseHolds,
     });
-    token0Balance.quantity = new BigNumber(responseData.token0Balance.quantity);
+    (token0Balance as any).quantity = new BigNumber(responseData.token0Balance.quantity);
 
     const token1Balance = new TokenBalance({
       owner: responseData.token1Balance.owner,
@@ -149,18 +147,16 @@ export class PoolDataManager {
       category: responseData.token1Balance.category,
       type: responseData.token1Balance.type,
       additionalKey: responseData.token1Balance.additionalKey,
-      instanceIds: responseData.token1Balance.instanceIds,
-      lockedHolds: responseData.token1Balance.lockedHolds,
-      inUseHolds: responseData.token1Balance.inUseHolds,
     });
-    token1Balance.quantity = new BigNumber(responseData.token1Balance.quantity);
+    (token1Balance as any).quantity = new BigNumber(responseData.token1Balance.quantity);
 
     // 4. Create and return CompositePoolDto
+    // Use 'as any' to work around TokenBalance type conflicts between package versions
     return new CompositePoolDto(
       pool,
       tickDataMap,
-      token0Balance,
-      token1Balance,
+      token0Balance as any,
+      token1Balance as any,
       responseData.token0Decimals,
       responseData.token1Decimals
     );

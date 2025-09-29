@@ -162,7 +162,7 @@ export class ArbitrageDetector {
     maxHops: number = 3
   ): Promise<ArbitrageOpportunity | null> {
     const opportunities = await this.findArbitrageOpportunities(baseToken, amount, maxHops);
-    return opportunities.length > 0 ? opportunities[0] : null;
+    return opportunities.length > 0 ? (opportunities[0] ?? null) : null;
   }
 
   /**
