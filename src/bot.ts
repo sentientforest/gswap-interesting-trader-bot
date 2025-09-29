@@ -183,7 +183,7 @@ export class MostInterestingTraderBot {
     try {
       // Use GALA as base token, with configured max trade size
       const opportunities = await this.arbitrageDetector.findArbitrageOpportunities(
-        this.config.galaTokenKey,
+        this.config.preferredTokenKey,
         this.config.arbitrageMaxTradeSize,
         this.config.arbitrageMaxHops
       );
