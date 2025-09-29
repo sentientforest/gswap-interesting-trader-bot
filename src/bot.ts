@@ -140,7 +140,7 @@ export class MostInterestingTraderBot {
       this.logger.error(`Trade cycle failed: ${error instanceof Error ? error.message : String(error)}`);
     }
 
-    this.logger.info(`Trade cycle completed`);
+    this.logger.info(`Trade cycle completed. Next trade cycle in ${this.config.tradeInterval}ms`);
     this.logger.info('-' .repeat(40));
   }
 
