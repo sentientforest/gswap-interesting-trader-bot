@@ -66,6 +66,7 @@ export class MostInterestingTraderBot {
       this.logger.info(`Arbitrage scan interval: ${this.config.arbitrageCheckInterval}ms`);
       this.logger.info(`Min profit threshold: ${this.config.arbitrageMinProfitPercent}%`);
       this.logger.info(`Arbitrage trade size: ${this.config.arbitrageMaxTradeSize}`);
+      this.logger.info(`Arbitrage tokens: ${this.config.arbitrageTokenKeys.join(", ")}`);
     }
     this.logger.info(`Transaction timeout: ${this.config.transactionTimeoutMs}ms (${this.config.transactionTimeoutMs / 60000} minutes)`);
     this.logger.info('GSwap SDK Configuration:');
@@ -182,49 +183,60 @@ export class MostInterestingTraderBot {
     this.logger.info('');
     this.logger.info(`Starting arbitrage scan at ${new Date().toISOString()}`);
 
-    try {
-      // Use GALA as base token, with configured max trade size
-      const opportunities = await this.arbitrageDetector.findArbitrageOpportunities(
-        this.config.preferredTokenKey,
-        this.config.arbitrageMaxTradeSize,
-        this.config.arbitrageMaxHops
-      );
+    for (let i = 0; i < this.config.arbitrageTokenKeys.length; i++) {
+      const arbitrageTokenKey = this.config.arbitrageTokenKeys[i];
+      const tradeSize = this.config.arbitrageMaxTradeSize[i] ?? new BigNumber(100);
 
-      this.lastArbitrageScanTime = new Date();
-
-      if (opportunities.length === 0) {
-        this.logger.info('No profitable arbitrage opportunities found');
-        return;
+      if (arbitrageTokenKey === undefined) {
+        continue;
       }
 
-      // Execute the most profitable opportunity
-      const bestOpportunity = opportunities[0];
-      if (!bestOpportunity) return;
+      this.logger.info(`Begin arbitrage scan for ${arbitrageTokenKey}, trade size: ${tradeSize.toString()}`);
 
-      this.logger.info(`\nFound profitable arbitrage opportunity:`);
-      this.logger.info(`  ${bestOpportunity.path.tokens.map(t => t.split('|')[0]).join(' → ')}`);
-      this.logger.info(`  Expected profit: ${bestOpportunity.netProfit} (${bestOpportunity.profitPercentage.toFixed(2)}%)`);
+      try {
+        const opportunities = await this.arbitrageDetector.findArbitrageOpportunities(
+          arbitrageTokenKey,
+          tradeSize,
+          this.config.arbitrageMaxHops
+        );
 
-      if (this.config.enableTrading) {
-        const result = await this.tradingStrategy.executeArbitrageOpportunity(bestOpportunity);
-        this.arbitrageDetector.recordExecution(result);
+        this.lastArbitrageScanTime = new Date();
 
-        if (result.success && result.actualProfit) {
-          this.logger.info(`\n✅ Arbitrage executed successfully!`);
-          this.logger.info(`  Actual profit: ${result.actualProfit.toFixed(4)}`);
-        } else {
-          this.logger.error(`\n❌ Arbitrage execution failed: ${result.error || 'Unknown error'}`);
+        if (opportunities.length === 0) {
+          this.logger.info('No profitable arbitrage opportunities found');
+          continue;
         }
-      } else {
-        this.logger.info('[DRY RUN] Would execute this arbitrage opportunity');
+
+        // Execute the most profitable opportunity
+        const bestOpportunity = opportunities[0];
+        if (!bestOpportunity) continue;
+
+        this.logger.info(`\nFound profitable arbitrage opportunity:`);
+        this.logger.info(`  ${bestOpportunity.path.tokens.map(t => t.split('|')[0]).join(' → ')}`);
+        this.logger.info(`  Expected profit: ${bestOpportunity.netProfit} (${bestOpportunity.profitPercentage.toFixed(2)}%)`);
+
+        if (this.config.enableTrading) {
+          const result = await this.tradingStrategy.executeArbitrageOpportunity(bestOpportunity);
+          this.arbitrageDetector.recordExecution(result);
+
+          if (result.success && result.actualProfit) {
+            this.logger.info(`\n✅ Arbitrage executed successfully!`);
+            this.logger.info(`  Actual profit: ${result.actualProfit.toFixed(4)}`);
+          } else {
+            this.logger.error(`\n❌ Arbitrage execution failed: ${result.error || 'Unknown error'}`);
+          }
+        } else {
+          this.logger.info('[DRY RUN] Would execute this arbitrage opportunity');
+        }
+
+        // Clear expired pool cache
+        this.arbitrageDetector.clearExpiredCache();
+
+      } catch (error) {
+        this.logger.error(`Arbitrage scan failed: ${error instanceof Error ? error.message : String(error)}`);
       }
-
-      // Clear expired pool cache
-      this.arbitrageDetector.clearExpiredCache();
-
-    } catch (error) {
-      this.logger.error(`Arbitrage scan failed: ${error instanceof Error ? error.message : String(error)}`);
     }
+    
 
     this.logger.info(`Arbitrage scan completed. Next scan in ${this.config.arbitrageCheckInterval}ms`);
     this.logger.info('-' .repeat(40));

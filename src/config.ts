@@ -63,10 +63,11 @@ export interface BotConfig {
   enableArbitrage: boolean;
   arbitrageCheckInterval: number; // milliseconds
   arbitrageMinProfitPercent: BigNumber; // minimum profit percentage
-  arbitrageMaxTradeSize: BigNumber; // maximum GALA to use per arbitrage
+  arbitrageMaxTradeSize: BigNumber[]; // maximum GALA to use per arbitrage
   arbitrageMaxHops: number; // maximum hops in circular path
   arbitrageMinLiquidity: BigNumber; // minimum pool liquidity to consider
   arbitragePoolCacheTTL: number; // pool data cache TTL in milliseconds
+  arbitrageTokenKeys: string[];
 
   // Wallet configuration
   walletAddress: string;
@@ -140,11 +141,13 @@ export function loadConfig(): BotConfig {
     enableArbitrage: process.env.ENABLE_ARBITRAGE === 'true', // Default to false for safety
     arbitrageCheckInterval: Number(process.env.ARBITRAGE_CHECK_INTERVAL_MS) || 120_000, // 2 minutes default
     arbitrageMinProfitPercent: new BigNumber(process.env.ARBITRAGE_MIN_PROFIT_PERCENT ?? 1.0), // 1% minimum profit
-    arbitrageMaxTradeSize: new BigNumber(process.env.ARBITRAGE_MAX_TRADE_SIZE ?? 100), // 100 GALA max
+    arbitrageMaxTradeSize: process.env.ARBITRAGE_MAX_TRADE_SIZE ? 
+      process.env.ARBITRAGE_MAX_TRADE_SIZE.split(",").map((s) => new BigNumber(s)) : 
+      [new BigNumber(100)], 
     arbitrageMaxHops: Number(process.env.ARBITRAGE_MAX_HOPS) || 3, // 3 hops maximum
     arbitrageMinLiquidity: new BigNumber(process.env.ARBITRAGE_MIN_LIQUIDITY || 1000), // 1000 minimum liquidity
     arbitragePoolCacheTTL: Number(process.env.ARBITRAGE_POOL_CACHE_TTL) || 60_000, // 1 minute cache
-
+    arbitrageTokenKeys: process.env.ARBITRAGE_TOKENS ? process.env.ARBITRAGE_TOKENS.split(",") : [],
     // Wallet configuration
     walletAddress,
     privateKey,
