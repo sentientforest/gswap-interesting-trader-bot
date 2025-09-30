@@ -79,7 +79,7 @@ export class ProfitCalculator {
     // Calculate net profit
     // const netProfit = grossProfit.minus(gasEstimateBN);
     // todo: without conversion between GALA and preferredToken, subtracting GALA transaction fees from grossProfit is incorrect
-    const netProfit = grossProfit.minus(0);
+    const netProfit = grossProfit.times(0.98);
 
     // Calculate profit percentage
     const profitPercentage = netProfit.dividedBy(inputAmountBN).multipliedBy(100).toNumber();
