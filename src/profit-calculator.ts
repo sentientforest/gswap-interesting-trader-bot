@@ -1,16 +1,17 @@
 import { CircularPath } from './circular-path-finder.js';
 import { OfflineQuoteEngine } from './offline-quote.js';
 import { BotConfig } from './config.js';
+import BigNumber from 'bignumber.js';
 
 export interface ArbitrageOpportunity {
   path: CircularPath;
-  inputAmount: number;
-  expectedOutputAmount: number;
-  grossProfit: number;
-  gasEstimate: number;
-  netProfit: number;
+  inputAmount: string; // Use string to represent BigNumber amounts
+  expectedOutputAmount: string;
+  grossProfit: string;
+  gasEstimate: string;
+  netProfit: string;
   profitPercentage: number;
-  priceImpacts: number[]; // Price impact for each hop
+  priceImpacts: number[]; // Price impact for each hop (percentage, safe as number)
   timestamp: Date;
 }
 
@@ -28,10 +29,11 @@ export class ProfitCalculator {
    */
   async calculateProfitability(
     path: CircularPath,
-    inputAmount: number
+    inputAmount: BigNumber
   ): Promise<ArbitrageOpportunity> {
-    // Chain quotes through all hops
-    let currentAmount = inputAmount;
+    // Convert input to BigNumber
+    let currentAmount = new BigNumber(inputAmount.toString());
+    const inputAmountBN = new BigNumber(inputAmount.toString());
     const priceImpacts: number[] = [];
 
     for (let i = 0; i < path.hops; i++) {
@@ -43,20 +45,24 @@ export class ProfitCalculator {
         throw new Error(`Invalid path at hop ${i}: missing pool or token data`);
       }
 
+      const hopInput = new BigNumber(currentAmount);
+
       try {
         // Get quote for this hop
         const quote = await this.offlineQuoteEngine.quoteExactInput(
           pool,
           tokenIn,
           tokenOut,
-          currentAmount
+          hopInput
         );
 
-        // Update amount for next hop (take absolute value of amountOut)
-        currentAmount = Math.abs(parseFloat(quote.amountOut));
+        // Update amount for next hop - convert from string and take absolute value
+        currentAmount = new BigNumber(quote.amountOut).abs();
+        const hopOutput = new BigNumber(currentAmount);
+
         priceImpacts.push(quote.priceImpact);
 
-        console.log(`  Hop ${i + 1}: ${inputAmount} ${tokenIn.split('|')[0]} → ${currentAmount.toFixed(6)} ${tokenOut.split('|')[0]} (impact: ${quote.priceImpact.toFixed(4)}%)`);
+        console.log(`  Hop ${i + 1}: ${hopInput.toString()} ${tokenIn.split('|')[0]} → ${hopOutput.toString()} ${tokenOut.split('|')[0]} (impact: ${quote.priceImpact.toFixed(4)}%)`);
       } catch (error) {
         throw new Error(`Failed to quote hop ${i + 1}: ${error instanceof Error ? error.message : error}`);
       }
@@ -65,24 +71,28 @@ export class ProfitCalculator {
     const expectedOutputAmount = currentAmount;
 
     // Calculate gross profit
-    const grossProfit = expectedOutputAmount - inputAmount;
+    const grossProfit = expectedOutputAmount.minus(inputAmountBN);
 
     // Estimate gas costs (GALA)
-    const gasEstimate = this.offlineQuoteEngine.estimateGasCost() * path.hops;
+    const gasEstimateBN = new BigNumber(this.offlineQuoteEngine.estimateGasCost()).multipliedBy(path.hops);
 
     // Calculate net profit
-    const netProfit = grossProfit - gasEstimate;
+    // const netProfit = grossProfit.minus(gasEstimateBN);
+    // todo: without conversion between GALA and preferredToken, subtracting GALA transaction fees from grossProfit is incorrect
+    const netProfit = grossProfit.minus(0);
 
     // Calculate profit percentage
-    const profitPercentage = (netProfit / inputAmount) * 100;
+    const profitPercentage = netProfit.dividedBy(inputAmountBN).multipliedBy(100).toNumber();
+
+    console.log(`Path: ${path.tokens.map((t) => t + ' - ')} input: ${inputAmountBN.toString()}, net profit: ${netProfit.toString()}`);
 
     return {
       path,
-      inputAmount,
-      expectedOutputAmount,
-      grossProfit,
-      gasEstimate,
-      netProfit,
+      inputAmount: inputAmountBN.toString(),
+      expectedOutputAmount: expectedOutputAmount.toString(),
+      grossProfit: grossProfit.toString(),
+      gasEstimate: gasEstimateBN.toString(),
+      netProfit: netProfit.toString(),
       profitPercentage,
       priceImpacts,
       timestamp: new Date(),
@@ -94,7 +104,7 @@ export class ProfitCalculator {
    */
   async calculateMultiplePaths(
     paths: CircularPath[],
-    inputAmount: number
+    inputAmount: BigNumber
   ): Promise<ArbitrageOpportunity[]> {
     const opportunities: ArbitrageOpportunity[] = [];
 
@@ -116,12 +126,12 @@ export class ProfitCalculator {
    */
   filterProfitable(
     opportunities: ArbitrageOpportunity[],
-    minProfitPercent: number = 1
+    minProfitPercent: BigNumber = new BigNumber(1)
   ): ArbitrageOpportunity[] {
-    return opportunities.filter(opp =>
-      opp.netProfit > 0 &&
-      opp.profitPercentage >= minProfitPercent
-    );
+    return opportunities.filter(opp => {
+      const netProfitBN = new BigNumber(opp.netProfit);
+      return netProfitBN.isGreaterThan(0) && new BigNumber(opp.profitPercentage).isGreaterThanOrEqualTo(minProfitPercent);
+    });
   }
 
   /**
@@ -139,11 +149,11 @@ export class ProfitCalculator {
     const lines: string[] = [];
 
     lines.push(`Path: ${pathStr}`);
-    lines.push(`Input: ${opp.inputAmount.toFixed(4)}`);
-    lines.push(`Output: ${opp.expectedOutputAmount.toFixed(4)}`);
-    lines.push(`Gross Profit: ${opp.grossProfit.toFixed(4)}`);
-    lines.push(`Gas Cost: ${opp.gasEstimate.toFixed(4)}`);
-    lines.push(`Net Profit: ${opp.netProfit.toFixed(4)} (${opp.profitPercentage.toFixed(2)}%)`);
+    lines.push(`Input: ${new BigNumber(opp.inputAmount).toFixed(6)}`);
+    lines.push(`Output: ${new BigNumber(opp.expectedOutputAmount).toFixed(6)}`);
+    lines.push(`Gross Profit: ${new BigNumber(opp.grossProfit).toFixed(6)}`);
+    lines.push(`Gas Cost: ${new BigNumber(opp.gasEstimate).toFixed(6)}`);
+    lines.push(`Net Profit: ${new BigNumber(opp.netProfit).toFixed(6)} (${opp.profitPercentage.toFixed(2)}%)`);
     lines.push(`Price Impacts: ${opp.priceImpacts.map(p => p.toFixed(2) + '%').join(', ')}`);
 
     return lines.join('\n  ');

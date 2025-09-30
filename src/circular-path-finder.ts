@@ -16,7 +16,7 @@ export class CircularPathFinder {
     baseToken: string,
     maxHops: number,
     availablePools: PoolData[],
-    minLiquidity: number = 1000
+    minLiquidity: BigNumber = new BigNumber(1000)
   ): CircularPath[] {
     const paths: CircularPath[] = [];
 

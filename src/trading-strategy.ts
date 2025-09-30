@@ -416,7 +416,7 @@ export class TradingStrategy {
     console.log(`\n=== EXECUTING ARBITRAGE OPPORTUNITY ===`);
     const pathStr = opportunity.path.tokens.map(t => t.split('|')[0]).join(' → ');
     console.log(`Path: ${pathStr}`);
-    console.log(`Expected profit: ${opportunity.netProfit.toFixed(4)} (${opportunity.profitPercentage.toFixed(2)}%)`);
+    console.log(`Expected profit: ${opportunity.netProfit} (${opportunity.profitPercentage.toFixed(2)}%)`);
 
     const startTime = Date.now();
     const result: ArbitrageResult = {
@@ -430,8 +430,8 @@ export class TradingStrategy {
     if (!this.config.enableTrading) {
       console.log(`[DRY RUN] Would execute arbitrage with ${opportunity.inputAmount} input`);
       result.success = true;
-      result.actualOutputAmount = opportunity.expectedOutputAmount;
-      result.actualProfit = opportunity.netProfit;
+      result.actualOutputAmount = parseFloat(opportunity.expectedOutputAmount);
+      result.actualProfit = parseFloat(opportunity.netProfit);
       result.transactionIds = [`mock-arb-${Date.now()}`];
       result.executionTime = Date.now() - startTime;
       return result;
@@ -439,7 +439,7 @@ export class TradingStrategy {
 
     try {
       // Execute each hop sequentially
-      let currentAmount = opportunity.inputAmount;
+      let currentAmount = parseFloat(opportunity.inputAmount);
 
       for (let i = 0; i < opportunity.path.hops; i++) {
         const tokenIn = opportunity.path.tokens[i];
@@ -475,14 +475,14 @@ export class TradingStrategy {
 
       // Calculate actual profit
       result.actualOutputAmount = currentAmount;
-      result.actualProfit = currentAmount - opportunity.inputAmount;
+      result.actualProfit = currentAmount - parseFloat(opportunity.inputAmount);
       result.success = true;
 
       console.log(`\n✅ ARBITRAGE COMPLETE!`);
-      console.log(`Input: ${opportunity.inputAmount.toFixed(4)}`);
+      console.log(`Input: ${opportunity.inputAmount}`);
       console.log(`Output: ${currentAmount.toFixed(4)}`);
-      console.log(`Actual Profit: ${result.actualProfit.toFixed(4)} (${((result.actualProfit / opportunity.inputAmount) * 100).toFixed(2)}%)`);
-      console.log(`Expected Profit: ${opportunity.netProfit.toFixed(4)} (${opportunity.profitPercentage.toFixed(2)}%)`);
+      console.log(`Actual Profit: ${result.actualProfit?.toFixed(4)} (${((result.actualProfit ?? 0) / parseFloat(opportunity.inputAmount) * 100).toFixed(2)}%)`);
+      console.log(`Expected Profit: ${opportunity.netProfit} (${opportunity.profitPercentage.toFixed(2)}%)`);
 
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);

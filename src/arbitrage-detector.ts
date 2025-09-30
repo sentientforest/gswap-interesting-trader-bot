@@ -4,6 +4,7 @@ import { CircularPathFinder, CircularPath } from './circular-path-finder.js';
 import { ProfitCalculator, ArbitrageOpportunity } from './profit-calculator.js';
 import { TokenRegistry } from './token-registry.js';
 import { PoolRegistry } from './pool-registry.js';
+import BigNumber from "bignumber.js";
 
 export interface ArbitrageResult {
   opportunity: ArbitrageOpportunity;
@@ -42,12 +43,12 @@ export class ArbitrageDetector {
    */
   async findArbitrageOpportunities(
     baseToken: string,
-    amount: number,
+    amount: BigNumber,
     maxHops: number = 3
   ): Promise<ArbitrageOpportunity[]> {
     console.log(`\n=== SCANNING FOR ARBITRAGE OPPORTUNITIES ===`);
     console.log(`Base token: ${baseToken}`);
-    console.log(`Amount: ${amount}`);
+    console.log(`Amount: ${amount.toString()}`);
     console.log(`Max hops: ${maxHops}`);
 
     const startTime = Date.now();
@@ -98,7 +99,7 @@ export class ArbitrageDetector {
         sortedOpportunities.slice(0, 5).forEach((opp, i) => {
           const pathStr = opp.path.tokens.map(t => t.split('|')[0]).join(' → ');
           console.log(`  ${i + 1}. ${pathStr}`);
-          console.log(`     Net profit: ${opp.netProfit.toFixed(4)} (${opp.profitPercentage.toFixed(2)}%)`);
+          console.log(`     Net profit: ${opp.netProfit} (${opp.profitPercentage.toFixed(2)}%)`);
         });
       }
 
@@ -143,7 +144,7 @@ export class ArbitrageDetector {
    */
   async getBestOpportunity(
     baseToken: string,
-    amount: number,
+    amount: BigNumber,
     maxHops: number = 3
   ): Promise<ArbitrageOpportunity | null> {
     const opportunities = await this.findArbitrageOpportunities(baseToken, amount, maxHops);
@@ -193,7 +194,7 @@ export class ArbitrageDetector {
     const averageProfitPercent = profitableExecutions.length > 0
       ? profitableExecutions.reduce((sum, r) => {
           const profitPercent = r.actualProfit && r.opportunity.inputAmount
-            ? (r.actualProfit / r.opportunity.inputAmount) * 100
+            ? (r.actualProfit / parseFloat(r.opportunity.inputAmount)) * 100
             : 0;
           return sum + profitPercent;
         }, 0) / profitableExecutions.length

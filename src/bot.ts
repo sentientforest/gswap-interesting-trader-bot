@@ -4,6 +4,7 @@ import { BalanceManager, BalanceSummary } from './balance-manager.js';
 import { TradingStrategy, TradeResult } from './trading-strategy.js';
 import { Logger } from './logger.js';
 import { ArbitrageDetector } from './arbitrage-detector.js';
+import BigNumber from "bignumber.js";
 
 export class MostInterestingTraderBot {
   private config: BotConfig;
@@ -202,7 +203,7 @@ export class MostInterestingTraderBot {
 
       this.logger.info(`\nFound profitable arbitrage opportunity:`);
       this.logger.info(`  ${bestOpportunity.path.tokens.map(t => t.split('|')[0]).join(' → ')}`);
-      this.logger.info(`  Expected profit: ${bestOpportunity.netProfit.toFixed(4)} (${bestOpportunity.profitPercentage.toFixed(2)}%)`);
+      this.logger.info(`  Expected profit: ${bestOpportunity.netProfit} (${bestOpportunity.profitPercentage.toFixed(2)}%)`);
 
       if (this.config.enableTrading) {
         const result = await this.tradingStrategy.executeArbitrageOpportunity(bestOpportunity);

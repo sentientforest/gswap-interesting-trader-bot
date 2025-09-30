@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import BigNumber from "bignumber.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -51,8 +52,8 @@ export class PoolRegistry {
     return this.pools;
   }
 
-  getPoolsWithMinLiquidity(minLiquidity: number): PoolInfo[] {
-    return this.pools.filter(p => p.liquidity >= minLiquidity);
+  getPoolsWithMinLiquidity(minLiquidity: BigNumber): PoolInfo[] {
+    return this.pools.filter(p => new BigNumber(p.liquidity).isGreaterThanOrEqualTo(minLiquidity));
   }
 
   getPoolsForToken(tokenKey: string): PoolInfo[] {

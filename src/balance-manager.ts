@@ -1,5 +1,6 @@
 import { GSwap } from '@gala-chain/gswap-sdk';
 import { BotConfig } from './config.js';
+import BigNumber from "bignumber.js";
 
 export interface TokenBalance {
   tokenKey: string;
