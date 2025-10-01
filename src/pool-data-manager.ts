@@ -18,7 +18,7 @@ interface CachedPool {
 
 export class PoolDataManager {
   private poolCache: Map<string, CachedPool> = new Map();
-  private cacheTTL: number = 60000; // 60 seconds default
+  private cacheTTL: number = 15000; // 15 seconds default
   private getCompositePoolUrl: string;
 
   constructor(getCompositePoolUrl: string = 'https://gateway-mainnet.galachain.com/api/asset/dexv3-contract/GetCompositePool', cacheTTL?: number) {

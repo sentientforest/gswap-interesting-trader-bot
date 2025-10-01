@@ -11,6 +11,7 @@ export interface PoolInfo {
   token1: string;
   fee: number;
   liquidity: number;
+  chainKey?: string;
 }
 
 export class PoolRegistry {
@@ -31,7 +32,7 @@ export class PoolRegistry {
         const parts = lines[i]?.split(',');
         if (!parts || parts.length < 4) continue;
 
-        const [token0, token1, fee, liquidity] = parts;
+        const [token0, token1, fee, liquidity, chainKey] = parts;
         if (!token0 || !token1 || !fee || !liquidity) continue;
 
         this.pools.push({
@@ -39,6 +40,7 @@ export class PoolRegistry {
           token1: token1.trim() + '|Unit|none|none',
           fee: parseInt(fee.trim()),
           liquidity: parseFloat(liquidity.trim()),
+          chainKey: chainKey?.trim() ?? "",
         });
       }
 

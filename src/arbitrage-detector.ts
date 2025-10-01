@@ -124,6 +124,8 @@ export class ArbitrageDetector {
     let successCount = 0;
     let failCount = 0;
 
+    const feeTiers = [500, 3000, 10000];
+    
     // Load each known pool
     for (const pool of knownPools) {
       try {

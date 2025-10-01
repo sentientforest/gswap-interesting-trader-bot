@@ -1,9 +1,12 @@
-import { GSwap, PrivateKeySigner } from '@gala-chain/gswap-sdk';
+import { GSwap, PendingTransaction, PrivateKeySigner } from '@gala-chain/gswap-sdk';
 import { BotConfig } from './config.js';
 import { TokenBalance } from './balance-manager.js';
 import { TokenRegistry } from './token-registry.js';
 import { ArbitrageOpportunity } from './profit-calculator.js';
 import { ArbitrageResult } from './arbitrage-detector.js';
+import { OfflineQuoteEngine } from './offline-quote.js';
+import { json } from 'express';
+import BigNumber from "bignumber.js";
 
 export interface TradeResult {
   success: boolean;
@@ -26,6 +29,7 @@ export interface PoolInfo {
 
 export class TradingStrategy {
   private gSwap: GSwap;
+  private offlineQuoteEngine: OfflineQuoteEngine;
   private config: BotConfig;
   private tradeHistory: TradeResult[] = [];
   private tokenRegistry: TokenRegistry;
@@ -33,6 +37,7 @@ export class TradingStrategy {
   constructor(config: BotConfig) {
     this.config = config;
     this.tokenRegistry = new TokenRegistry();
+    this.offlineQuoteEngine = new OfflineQuoteEngine();
 
     // Always create signer with the provided private key and URL configuration
     const signerConfig: any = {
@@ -446,15 +451,33 @@ export class TradingStrategy {
         const tokenOut = opportunity.path.tokens[i + 1];
         const fee = opportunity.path.fees[i];
 
+
         if (!tokenIn || !tokenOut || !fee) {
           throw new Error(`Invalid path data at hop ${i}`);
         }
 
-        console.log(`\nExecuting hop ${i + 1}/${opportunity.path.hops}: ${currentAmount.toFixed(6)} ${tokenIn.split('|')[0]} → ${tokenOut.split('|')[0]}`);
+        const amountIn = new BigNumber(currentAmount);
+
+        const pool = opportunity.path.pools[i];
+
+        if (!pool) {
+          const msg = `MISSING POOLDATA FOR HOP:: ${i}, ${opportunity.path.pools}`;
+          console.log(msg);
+          throw new Error(msg);
+        }
+
+        const amountOut: number = await this.offlineQuoteEngine.getOutputAmount(
+          pool,
+          tokenIn,
+          tokenOut,
+          amountIn
+        );
+
+        console.log(`\nExecuting hop ${i + 1}/${opportunity.path.hops}: ${amountIn.toString()} ${tokenIn.split('|')[0]} → ${tokenOut.split('|')[0]}`);
 
         // Execute the trade
-        const tradeResult = await this.executeTrade(tokenIn, tokenOut, currentAmount, fee);
-
+        const tradeResult = await this.submitTrade(tokenIn, tokenOut, amountIn, fee, new BigNumber(amountOut));
+        
         if (!tradeResult.success || !tradeResult.amountOut) {
           throw new Error(`Hop ${i + 1} failed: ${tradeResult.error || 'Unknown error'}`);
         }
@@ -463,14 +486,10 @@ export class TradingStrategy {
           result.transactionIds.push(tradeResult.transactionId);
         }
 
-        // Update amount for next hop
-        currentAmount = tradeResult.amountOut;
-        console.log(`✅ Hop ${i + 1} complete: received ${currentAmount.toFixed(6)} ${tokenOut.split('|')[0]}`);
+        // amountOut becomes amountIn on next trade
+        currentAmount = amountOut;
 
-        // Small delay between hops to avoid rate limiting
-        if (i < opportunity.path.hops - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+        console.log(`✅ Hop ${i + 1} complete: received ${currentAmount.toFixed(6)} ${tokenOut.split('|')[0]}`);
       }
 
       // Calculate actual profit
@@ -493,5 +512,82 @@ export class TradingStrategy {
     console.log(`Execution time: ${result.executionTime}ms`);
 
     return result;
+  }
+
+  async submitTrade(
+    fromToken: string,
+    toToken: string,
+    amount: BigNumber,
+    fee: number,
+    expectedOutput: BigNumber
+  ): Promise<TradeResult> {
+    console.log(`\n=== SUBMIT TRADE ===`);
+    console.log(`From: ${amount} ${fromToken}`);
+    console.log(`To: ${toToken}`);
+    console.log(`Fee tier: ${fee || 'auto-detect'}`);
+
+    if (!this.config.enableTrading) {
+      throw new Error(`Dry run not enabled for submitTrade()`)
+    }
+
+    try {
+      const poolFee = fee;
+
+      const minOutput = expectedOutput.times(
+        new BigNumber(1).minus(this.config.maxSlippage ?? 0)
+      );
+      console.log(`Trading ${amount} ${fromToken} for ${toToken}`);
+      console.log(`Expected output: ${expectedOutput}, Min output: ${minOutput}`);
+
+      // Connect to socket for transaction updates
+      const isConnected = GSwap.events.eventSocketConnected();
+
+      if (!isConnected) {
+        await GSwap.events.connectEventSocket(this.config.bundlerBaseUrl ?? 'https://bundle-backend-prod1.defi.gala.com');
+      }
+
+      console.log('Submitting swap transaction...');
+
+      const settlement: TradeResult = {
+        success: false,
+        fromToken,
+        toToken,
+        amountIn: amount.toNumber(),
+        timestamp: new Date(),
+      }
+
+      const pendingTx: PendingTransaction = await this.gSwap.swaps.swap(
+        fromToken,
+        toToken,
+        poolFee,
+        {
+          exactIn: amount.toString(),
+          amountOutMinimum: minOutput.toString(),
+        },
+        this.config.walletAddress
+      );
+
+      console.log(`Transaction submitted with ID: ${pendingTx.transactionId}`);
+      console.log('Waiting for transaction to complete...');
+
+      await pendingTx.wait()
+        .catch((error) => {
+          settlement.error = error instanceof Error ? error.message : String(error);
+          console.error(`Trade failed: ${settlement.error}`);
+          throw error;
+        });   
+      
+      console.log('Transaction completed successfully!');
+      settlement.success = true;
+      settlement.amountOut = minOutput.toNumber();
+      settlement.transactionId = pendingTx.transactionId; 
+      console.log(`Trade successful! Received ${settlement.amountOut} ${toToken}`);
+
+      return settlement;  
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(`Trade failed: ${reason}`);
+      throw new Error(`${reason}`)
+    } 
   }
 }
