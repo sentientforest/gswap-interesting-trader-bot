@@ -1,9 +1,13 @@
-import { GSwap, PrivateKeySigner } from '@gala-chain/gswap-sdk';
+import { GSwap, PendingTransaction, PrivateKeySigner } from '@gala-chain/gswap-sdk';
 import { BotConfig } from './config.js';
 import { TokenBalance } from './balance-manager.js';
 import { TokenRegistry } from './token-registry.js';
 import { ArbitrageOpportunity } from './profit-calculator.js';
 import { ArbitrageResult } from './arbitrage-detector.js';
+import { OfflineQuoteEngine } from './offline-quote.js';
+import { json } from 'express';
+import BigNumber from "bignumber.js";
+import { PoolDataManager } from './pool-data-manager.js';
 
 export interface TradeResult {
   success: boolean;
@@ -26,13 +30,16 @@ export interface PoolInfo {
 
 export class TradingStrategy {
   private gSwap: GSwap;
+  private offlineQuoteEngine: OfflineQuoteEngine;
   private config: BotConfig;
   private tradeHistory: TradeResult[] = [];
   private tokenRegistry: TokenRegistry;
+  private poolDataManager: PoolDataManager;
 
   constructor(config: BotConfig) {
     this.config = config;
     this.tokenRegistry = new TokenRegistry();
+    this.offlineQuoteEngine = new OfflineQuoteEngine();
 
     // Always create signer with the provided private key and URL configuration
     const signerConfig: any = {
@@ -47,11 +54,23 @@ export class TradingStrategy {
     };
 
     this.gSwap = new GSwap(signerConfig);
+    this.poolDataManager = new PoolDataManager(`${config.gatewayBaseUrl}/api/asset/dexv3-contract/GetCompositePool`)
+  }
+
+  /**
+   * Normalize token order to match how pools are stored (lexicographically)
+   */
+  private normalizeTokenOrder(tokenA: string, tokenB: string): [string, string] {
+    return tokenA < tokenB ? [tokenA, tokenB] : [tokenB, tokenA];
   }
 
   async findAvailablePools(tokenA: string, tokenB: string): Promise<PoolInfo[]> {
     console.log(`\n=== FINDING POOLS FOR ${tokenA} <-> ${tokenB} ===`);
     const pools: PoolInfo[] = [];
+
+    // Normalize token order to match how pools are stored on-chain
+    const [token0, token1] = this.normalizeTokenOrder(tokenA, tokenB);
+    console.log(`Normalized order: ${token0} / ${token1}`);
 
     // Check all three fee tiers
     const feeTiers = [500, 3000, 10000] as const;
@@ -60,19 +79,19 @@ export class TradingStrategy {
     for (const fee of feeTiers) {
       try {
         console.log(`Checking pool with fee ${fee}...`);
-      
-        const poolData = await this.gSwap.pools.getPoolData(tokenA, tokenB, fee);
 
-        const liquidity = parseFloat(poolData.liquidity?.toString() || '0');
+        const poolData = await this.poolDataManager.getCompositePoolData(token0, token1, fee);
+
+        const liquidity = parseFloat(poolData.compositePool.pool.liquidity?.toString() || '0');
         console.log(`  Fee ${fee}: liquidity = ${liquidity}`);
 
         if (poolData && liquidity > 0) {
           pools.push({
-            token0: tokenA,
-            token1: tokenB,
+            token0: token0,  // Use normalized token order
+            token1: token1,
             fee,
-            liquidity: poolData.liquidity.toString(),
-            sqrtPrice: poolData.sqrtPrice.toString(),
+            liquidity: poolData.compositePool.pool.liquidity.toString(),
+            sqrtPrice: poolData.compositePool.pool.sqrtPrice.toString(),
           });
           console.log(`  ✅ Pool with fee ${fee} has liquidity: ${liquidity}`);
         } else {
@@ -416,7 +435,7 @@ export class TradingStrategy {
     console.log(`\n=== EXECUTING ARBITRAGE OPPORTUNITY ===`);
     const pathStr = opportunity.path.tokens.map(t => t.split('|')[0]).join(' → ');
     console.log(`Path: ${pathStr}`);
-    console.log(`Expected profit: ${opportunity.netProfit.toFixed(4)} (${opportunity.profitPercentage.toFixed(2)}%)`);
+    console.log(`Expected profit: ${opportunity.netProfit} (${opportunity.profitPercentage.toFixed(2)}%)`);
 
     const startTime = Date.now();
     const result: ArbitrageResult = {
@@ -430,8 +449,8 @@ export class TradingStrategy {
     if (!this.config.enableTrading) {
       console.log(`[DRY RUN] Would execute arbitrage with ${opportunity.inputAmount} input`);
       result.success = true;
-      result.actualOutputAmount = opportunity.expectedOutputAmount;
-      result.actualProfit = opportunity.netProfit;
+      result.actualOutputAmount = parseFloat(opportunity.expectedOutputAmount);
+      result.actualProfit = parseFloat(opportunity.netProfit);
       result.transactionIds = [`mock-arb-${Date.now()}`];
       result.executionTime = Date.now() - startTime;
       return result;
@@ -439,22 +458,40 @@ export class TradingStrategy {
 
     try {
       // Execute each hop sequentially
-      let currentAmount = opportunity.inputAmount;
+      let currentAmount = parseFloat(opportunity.inputAmount);
 
       for (let i = 0; i < opportunity.path.hops; i++) {
         const tokenIn = opportunity.path.tokens[i];
         const tokenOut = opportunity.path.tokens[i + 1];
         const fee = opportunity.path.fees[i];
 
+
         if (!tokenIn || !tokenOut || !fee) {
           throw new Error(`Invalid path data at hop ${i}`);
         }
 
-        console.log(`\nExecuting hop ${i + 1}/${opportunity.path.hops}: ${currentAmount.toFixed(6)} ${tokenIn.split('|')[0]} → ${tokenOut.split('|')[0]}`);
+        const amountIn = new BigNumber(currentAmount);
+
+        const pool = opportunity.path.pools[i];
+
+        if (!pool) {
+          const msg = `MISSING POOLDATA FOR HOP:: ${i}, ${opportunity.path.pools}`;
+          console.log(msg);
+          throw new Error(msg);
+        }
+
+        const amountOut: number = await this.offlineQuoteEngine.getOutputAmount(
+          pool,
+          tokenIn,
+          tokenOut,
+          amountIn
+        );
+
+        console.log(`\nExecuting hop ${i + 1}/${opportunity.path.hops}: ${amountIn.toString()} ${tokenIn.split('|')[0]} → ${tokenOut.split('|')[0]}`);
 
         // Execute the trade
-        const tradeResult = await this.executeTrade(tokenIn, tokenOut, currentAmount, fee);
-
+        const tradeResult = await this.submitTrade(tokenIn, tokenOut, amountIn, fee, new BigNumber(amountOut));
+        
         if (!tradeResult.success || !tradeResult.amountOut) {
           throw new Error(`Hop ${i + 1} failed: ${tradeResult.error || 'Unknown error'}`);
         }
@@ -463,26 +500,22 @@ export class TradingStrategy {
           result.transactionIds.push(tradeResult.transactionId);
         }
 
-        // Update amount for next hop
-        currentAmount = tradeResult.amountOut;
-        console.log(`✅ Hop ${i + 1} complete: received ${currentAmount.toFixed(6)} ${tokenOut.split('|')[0]}`);
+        // amountOut becomes amountIn on next trade
+        currentAmount = amountOut;
 
-        // Small delay between hops to avoid rate limiting
-        if (i < opportunity.path.hops - 1) {
-          await new Promise(resolve => setTimeout(resolve, 2000));
-        }
+        console.log(`✅ Hop ${i + 1} complete: received ${currentAmount.toFixed(6)} ${tokenOut.split('|')[0]}`);
       }
 
       // Calculate actual profit
       result.actualOutputAmount = currentAmount;
-      result.actualProfit = currentAmount - opportunity.inputAmount;
+      result.actualProfit = currentAmount - parseFloat(opportunity.inputAmount);
       result.success = true;
 
       console.log(`\n✅ ARBITRAGE COMPLETE!`);
-      console.log(`Input: ${opportunity.inputAmount.toFixed(4)}`);
+      console.log(`Input: ${opportunity.inputAmount}`);
       console.log(`Output: ${currentAmount.toFixed(4)}`);
-      console.log(`Actual Profit: ${result.actualProfit.toFixed(4)} (${((result.actualProfit / opportunity.inputAmount) * 100).toFixed(2)}%)`);
-      console.log(`Expected Profit: ${opportunity.netProfit.toFixed(4)} (${opportunity.profitPercentage.toFixed(2)}%)`);
+      console.log(`Actual Profit: ${result.actualProfit?.toFixed(4)} (${((result.actualProfit ?? 0) / parseFloat(opportunity.inputAmount) * 100).toFixed(2)}%)`);
+      console.log(`Expected Profit: ${opportunity.netProfit} (${opportunity.profitPercentage.toFixed(2)}%)`);
 
     } catch (error) {
       result.error = error instanceof Error ? error.message : String(error);
@@ -493,5 +526,82 @@ export class TradingStrategy {
     console.log(`Execution time: ${result.executionTime}ms`);
 
     return result;
+  }
+
+  async submitTrade(
+    fromToken: string,
+    toToken: string,
+    amount: BigNumber,
+    fee: number,
+    expectedOutput: BigNumber
+  ): Promise<TradeResult> {
+    console.log(`\n=== SUBMIT TRADE ===`);
+    console.log(`From: ${amount} ${fromToken}`);
+    console.log(`To: ${toToken}`);
+    console.log(`Fee tier: ${fee || 'auto-detect'}`);
+
+    if (!this.config.enableTrading) {
+      throw new Error(`Dry run not enabled for submitTrade()`)
+    }
+
+    try {
+      const poolFee = fee;
+
+      const minOutput = expectedOutput.times(
+        new BigNumber(1).minus(this.config.maxSlippage ?? 0)
+      );
+      console.log(`Trading ${amount} ${fromToken} for ${toToken}`);
+      console.log(`Expected output: ${expectedOutput}, Min output: ${minOutput}`);
+
+      // Connect to socket for transaction updates
+      const isConnected = GSwap.events.eventSocketConnected();
+
+      if (!isConnected) {
+        await GSwap.events.connectEventSocket(this.config.bundlerBaseUrl ?? 'https://bundle-backend-prod1.defi.gala.com');
+      }
+
+      console.log('Submitting swap transaction...');
+
+      const settlement: TradeResult = {
+        success: false,
+        fromToken,
+        toToken,
+        amountIn: amount.toNumber(),
+        timestamp: new Date(),
+      }
+
+      const pendingTx: PendingTransaction = await this.gSwap.swaps.swap(
+        fromToken,
+        toToken,
+        poolFee,
+        {
+          exactIn: amount.toString(),
+          amountOutMinimum: minOutput.toString(),
+        },
+        this.config.walletAddress
+      );
+
+      console.log(`Transaction submitted with ID: ${pendingTx.transactionId}`);
+      console.log('Waiting for transaction to complete...');
+
+      await pendingTx.wait()
+        .catch((error) => {
+          settlement.error = error instanceof Error ? error.message : String(error);
+          console.error(`Trade failed: ${settlement.error}`);
+          throw error;
+        });   
+      
+      console.log('Transaction completed successfully!');
+      settlement.success = true;
+      settlement.amountOut = minOutput.toNumber();
+      settlement.transactionId = pendingTx.transactionId; 
+      console.log(`Trade successful! Received ${settlement.amountOut} ${toToken}`);
+
+      return settlement;  
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      console.error(`Trade failed: ${reason}`);
+      throw new Error(`${reason}`)
+    } 
   }
 }

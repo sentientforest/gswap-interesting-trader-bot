@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import BigNumber from "bignumber.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -10,6 +11,7 @@ export interface PoolInfo {
   token1: string;
   fee: number;
   liquidity: number;
+  chainKey?: string;
 }
 
 export class PoolRegistry {
@@ -30,7 +32,7 @@ export class PoolRegistry {
         const parts = lines[i]?.split(',');
         if (!parts || parts.length < 4) continue;
 
-        const [token0, token1, fee, liquidity] = parts;
+        const [token0, token1, fee, liquidity, chainKey] = parts;
         if (!token0 || !token1 || !fee || !liquidity) continue;
 
         this.pools.push({
@@ -38,6 +40,7 @@ export class PoolRegistry {
           token1: token1.trim() + '|Unit|none|none',
           fee: parseInt(fee.trim()),
           liquidity: parseFloat(liquidity.trim()),
+          chainKey: chainKey?.trim() ?? "",
         });
       }
 
@@ -51,8 +54,8 @@ export class PoolRegistry {
     return this.pools;
   }
 
-  getPoolsWithMinLiquidity(minLiquidity: number): PoolInfo[] {
-    return this.pools.filter(p => p.liquidity >= minLiquidity);
+  getPoolsWithMinLiquidity(minLiquidity: BigNumber): PoolInfo[] {
+    return this.pools.filter(p => new BigNumber(p.liquidity).isGreaterThanOrEqualTo(minLiquidity));
   }
 
   getPoolsForToken(tokenKey: string): PoolInfo[] {

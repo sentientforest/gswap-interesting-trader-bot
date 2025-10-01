@@ -19,6 +19,7 @@ import { quoteExactInput } from './quote_exact_input.js';
 import { quoteExactOutput } from './quote_exact_output.js';
 import { removeLiquidity } from './remove_all_liquidity.js';
 import { swapTokens } from './swap.js';
+import BigNumber from "bignumber.js";
 
 // For functions that need calculation utilities, we still need a GSwap instance
 const gSwap = new GSwap({});

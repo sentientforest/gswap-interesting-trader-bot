@@ -1,6 +1,7 @@
 import { GSwap, PrivateKeySigner } from '@gala-chain/gswap-sdk';
 import 'dotenv/config';
 import { getPositionById } from './get_position_by_id.js';
+import BigNumber from "bignumber.js";
 
 export async function collectFeesFromPosition(address: string, positionId: string) {
   const privateKey = process.env.GALACHAIN_PRIVATE_KEY;

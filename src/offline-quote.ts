@@ -19,7 +19,7 @@ export class OfflineQuoteEngine {
     poolData: PoolData,
     tokenIn: string,
     _tokenOut: string,
-    amountIn: number | string
+    amountIn: BigNumber
   ): Promise<OfflineQuoteResult> {
     // Determine trade direction (zeroForOne)
     const zeroForOne = tokenIn === poolData.token0;
@@ -67,7 +67,7 @@ export class OfflineQuoteEngine {
     poolData: PoolData,
     tokenIn: string,
     tokenOut: string,
-    amountIn: number | string
+    amountIn: BigNumber
   ): Promise<number> {
     const quote = await this.quoteExactInput(poolData, tokenIn, tokenOut, amountIn);
 
@@ -84,7 +84,7 @@ export class OfflineQuoteEngine {
     poolData: PoolData,
     tokenIn: string,
     tokenOut: string,
-    amountIn: number | string
+    amountIn: BigNumber
   ): Promise<number> {
     const quote = await this.quoteExactInput(poolData, tokenIn, tokenOut, amountIn);
 
@@ -117,8 +117,7 @@ export class OfflineQuoteEngine {
    * This is a rough estimate - actual costs may vary
    */
   estimateGasCost(): number {
-    // Typical GalaChain swap costs around 0.1-0.5 GALA
-    // Being conservative, use 0.5 GALA per swap
-    return 0.5;
+    // As of Sept 2025 fees are flat one gala
+    return 1;
   }
 }

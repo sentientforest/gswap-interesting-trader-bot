@@ -1,5 +1,6 @@
-import { GSwap } from '@gala-chain/gswap-sdk';
+import { GetUserAssetsResult, GSwap } from '@gala-chain/gswap-sdk';
 import { BotConfig } from './config.js';
+import BigNumber from "bignumber.js";
 
 export interface TokenBalance {
   tokenKey: string;
@@ -26,7 +27,7 @@ export class BalanceManager {
 
   async getBalances(): Promise<BalanceSummary> {
     try {
-      const assets = await this.gSwap.assets.getUserAssets(
+      const assets: GetUserAssetsResult = await this.gSwap.assets.getUserAssets(
         this.config.walletAddress,
         1,
         20
@@ -74,8 +75,9 @@ export class BalanceManager {
   private constructTokenKey(token: any): string {
     // Construct the token key from the token object
     // Handle different possible token object structures
+    console.log("constructTokenKey: ", `${JSON.stringify(token)}`)
     const tokenClass = token.tokenClassKey || token.tokenClass || token;
-    const collection = tokenClass?.collection || token.symbol || 'unknown';
+    const collection = tokenClass?.collection || token.name || token.symbol || 'unknown';
     const category = tokenClass?.category || 'Unit';
     const type = tokenClass?.type || 'none';
     const additionalKey = tokenClass?.additionalKey || 'none';
