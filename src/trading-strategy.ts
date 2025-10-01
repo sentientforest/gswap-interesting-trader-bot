@@ -7,6 +7,7 @@ import { ArbitrageResult } from './arbitrage-detector.js';
 import { OfflineQuoteEngine } from './offline-quote.js';
 import { json } from 'express';
 import BigNumber from "bignumber.js";
+import { PoolDataManager } from './pool-data-manager.js';
 
 export interface TradeResult {
   success: boolean;
@@ -33,6 +34,7 @@ export class TradingStrategy {
   private config: BotConfig;
   private tradeHistory: TradeResult[] = [];
   private tokenRegistry: TokenRegistry;
+  private poolDataManager: PoolDataManager;
 
   constructor(config: BotConfig) {
     this.config = config;
@@ -52,11 +54,23 @@ export class TradingStrategy {
     };
 
     this.gSwap = new GSwap(signerConfig);
+    this.poolDataManager = new PoolDataManager(`${config.gatewayBaseUrl}/api/asset/dexv3-contract/GetCompositePool`)
+  }
+
+  /**
+   * Normalize token order to match how pools are stored (lexicographically)
+   */
+  private normalizeTokenOrder(tokenA: string, tokenB: string): [string, string] {
+    return tokenA < tokenB ? [tokenA, tokenB] : [tokenB, tokenA];
   }
 
   async findAvailablePools(tokenA: string, tokenB: string): Promise<PoolInfo[]> {
     console.log(`\n=== FINDING POOLS FOR ${tokenA} <-> ${tokenB} ===`);
     const pools: PoolInfo[] = [];
+
+    // Normalize token order to match how pools are stored on-chain
+    const [token0, token1] = this.normalizeTokenOrder(tokenA, tokenB);
+    console.log(`Normalized order: ${token0} / ${token1}`);
 
     // Check all three fee tiers
     const feeTiers = [500, 3000, 10000] as const;
@@ -65,19 +79,19 @@ export class TradingStrategy {
     for (const fee of feeTiers) {
       try {
         console.log(`Checking pool with fee ${fee}...`);
-      
-        const poolData = await this.gSwap.pools.getPoolData(tokenA, tokenB, fee);
 
-        const liquidity = parseFloat(poolData.liquidity?.toString() || '0');
+        const poolData = await this.poolDataManager.getCompositePoolData(token0, token1, fee);
+
+        const liquidity = parseFloat(poolData.compositePool.pool.liquidity?.toString() || '0');
         console.log(`  Fee ${fee}: liquidity = ${liquidity}`);
 
         if (poolData && liquidity > 0) {
           pools.push({
-            token0: tokenA,
-            token1: tokenB,
+            token0: token0,  // Use normalized token order
+            token1: token1,
             fee,
-            liquidity: poolData.liquidity.toString(),
-            sqrtPrice: poolData.sqrtPrice.toString(),
+            liquidity: poolData.compositePool.pool.liquidity.toString(),
+            sqrtPrice: poolData.compositePool.pool.sqrtPrice.toString(),
           });
           console.log(`  ✅ Pool with fee ${fee} has liquidity: ${liquidity}`);
         } else {

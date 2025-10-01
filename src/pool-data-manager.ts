@@ -32,7 +32,10 @@ export class PoolDataManager {
    * Get composite pool data (cached if available and not expired)
    */
   async getCompositePoolData(token0Key: string, token1Key: string, fee: number): Promise<PoolData> {
-    const cacheKey = this.getCacheKey(token0Key, token1Key, fee);
+    // Normalize token order to match how pools are stored on-chain
+    const [normalizedToken0, normalizedToken1] = token0Key < token1Key ? [token0Key, token1Key] : [token1Key, token0Key];
+
+    const cacheKey = this.getCacheKey(normalizedToken0, normalizedToken1, fee);
     const cached = this.poolCache.get(cacheKey);
 
     // Return cached data if still valid
@@ -40,8 +43,8 @@ export class PoolDataManager {
       return cached.data;
     }
 
-    // Fetch fresh data
-    const poolData = await this.fetchCompositePoolData(token0Key, token1Key, fee);
+    // Fetch fresh data using normalized token order
+    const poolData = await this.fetchCompositePoolData(normalizedToken0, normalizedToken1, fee);
 
     // Cache it
     this.poolCache.set(cacheKey, {
